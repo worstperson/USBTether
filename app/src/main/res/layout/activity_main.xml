@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity"
+    tools:ignore="HardcodedText, UseSwitchCompatOrMaterialXml, LabelFor" >
+
+    <LinearLayout
+        android:id="@+id/layout1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="8pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="8pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Current Network:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <TextView
+            android:id="@+id/textview1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="UNKNOWN"
+            android:textAppearance="?android:attr/textAppearanceLarge"
+            android:textColor="#FF0000" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/line1"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_below="@id/layout1"
+        android:layout_marginBottom="5pt"
+        android:background="@android:color/darker_gray" />
+
+    <LinearLayout
+        android:id="@+id/layout2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/line1"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Enable Service:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/switch1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layout2"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Tether Interface:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Spinner
+            android:id="@+id/spinner1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layout3"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Modify Outgoing TTL:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/switch2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layout4"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="IPv6 Masquerading:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/switch3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layout5"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Autostart WireGuard:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/switch4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout7"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layout6"
+        android:layout_marginLeft="20pt"
+        android:layout_marginRight="20pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="WireGuard Profile:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <EditText
+            android:id="@+id/edittext1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1" />
+    </LinearLayout>
+
+</RelativeLayout>
