@@ -10,6 +10,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.IBinder;
@@ -18,6 +21,12 @@ import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Collections;
 
 public class ForegroundService extends Service {
 
@@ -28,26 +37,58 @@ public class ForegroundService extends Service {
 
     static public Boolean isStarted = false;
 
+    @SuppressLint("NewApi")
     private void runScript() {
+        unregisterReceiver(PowerReceiver); //Required for < android.os.Build.VERSION_CODES.P
+
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "");
         Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-        if (tetherInterface != null && !tetherInterface.equals("")) {
 
-            unregisterReceiver(PowerReceiver); //Required for < android.os.Build.VERSION_CODES.P
+        if (tetherInterface.equals("Auto")) {
+            ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (connectivityManager != null) {
+                Network activeNetwork = connectivityManager.getActiveNetwork();
+                if (activeNetwork != null) {
+                    LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
+                    if (linkProperties != null) {
+                        tetherInterface = linkProperties.getInterfaceName();
+                        if (tetherInterface != null) {
+                            try { //Check for separate CLAT interface
+                                NetworkInterface netint = NetworkInterface.getByName("v4-" + tetherInterface);
+                                if (netint != null) {
+                                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                                        if (inetAddress instanceof Inet4Address) {
+                                            tetherInterface = netint.getName();
+                                        }
+                                    }
+                                }
+                            } catch (SocketException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (tetherInterface != null && !tetherInterface.equals("") && !tetherInterface.equals("Auto")) {
+            SharedPreferences.Editor edit = sharedPref.edit();
+            edit.putString("lastNetwork", tetherInterface);
+            edit.apply();
 
             try {
                 Script.runCommands(tetherInterface, ipv6Masquerading, fixTTL);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(Intent.ACTION_POWER_CONNECTED);
-            filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
-            registerReceiver(PowerReceiver, filter);
         }
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_POWER_CONNECTED);
+        filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        registerReceiver(PowerReceiver, filter);
     }
 
     private void checkHost(Context context) {
@@ -79,11 +120,13 @@ public class ForegroundService extends Service {
                 checkHost(context);
             } else {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-                String tetherInterface = sharedPref.getString("tetherInterface", "");
+                String lastNetwork = sharedPref.getString("lastNetwork", "");
                 Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
                 Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
 
-                Script.resetInterface(tetherInterface, ipv6Masquerading, fixTTL);
+                if (!lastNetwork.equals("")) {
+                    Script.resetInterface(lastNetwork, ipv6Masquerading, fixTTL);
+                }
 
                 boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -152,11 +195,13 @@ public class ForegroundService extends Service {
         unregisterReceiver(PowerReceiver);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        String tetherInterface = sharedPref.getString("tetherInterface", "");
+        String lastNetwork = sharedPref.getString("lastNetwork", "");
         Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
 
-        Script.resetInterface(tetherInterface, ipv6Masquerading, fixTTL);
+        if (!lastNetwork.equals("")) {
+            Script.resetInterface(lastNetwork, ipv6Masquerading, fixTTL);
+        }
 
         Toast.makeText(this, "Service destroyed by user.", Toast.LENGTH_LONG).show();
     }

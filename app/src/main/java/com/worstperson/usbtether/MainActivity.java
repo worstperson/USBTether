@@ -99,6 +99,9 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<String> arraySpinner = new ArrayList<>();
         arraySpinner.add(tetherInterface);
+        if (!tetherInterface.equals("Auto")) {
+            arraySpinner.add("Auto");
+        }
         Enumeration<NetworkInterface> nets;
         try {
             nets = NetworkInterface.getNetworkInterfaces();
@@ -209,6 +212,9 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<String> arraySpinner = new ArrayList<>();
         arraySpinner.add(tetherInterface);
+        if (!tetherInterface.equals("Auto")) {
+            arraySpinner.add("Auto");
+        }
         Enumeration<NetworkInterface> nets;
         try {
             nets = NetworkInterface.getNetworkInterfaces();

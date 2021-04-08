@@ -83,8 +83,11 @@ public class Script {
                     enable_ip_forwarding();
                     set_up_nat(tetherInterface, ipv6Masquerading);
                     if (fixTTL) {
+                        // PREROUTING rules cause IPv6 packets to drop
                         shellCommand("iptables -t mangle -A POSTROUTING -o " + tetherInterface + " -j TTL --ttl-set 64");
-                        shellCommand("ip6tables -t mangle -A POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
+                        //if (ipv6Masquerading) { //FIXME: breaks mobile connectivity and does not even work afaict
+                        //    shellCommand("ip6tables -t mangle -A POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
+                        //}
                     }
                 } else {
                     Log.w("USBTether", "Tether interface already configured?!?");
@@ -124,9 +127,8 @@ public class Script {
             shellCommand("ndc ipfwd disable tethering");
             Shell.su("setprop sys.usb.config \"adb\"").exec();
             if (fixTTL) {
-                // PREROUTING rules cause IPv6 packets to drop
                 shellCommand("iptables -t mangle -D POSTROUTING -o " + tetherInterface + " -j TTL --ttl-set 64");
-                shellCommand("ip6tables -t mangle -D POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
+                //shellCommand("ip6tables -t mangle -D POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");
