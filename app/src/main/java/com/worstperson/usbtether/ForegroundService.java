@@ -23,6 +23,7 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 
 import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -44,7 +45,9 @@ public class ForegroundService extends Service {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "");
         Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+        Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
 
         if (tetherInterface.equals("Auto")) {
             ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -78,8 +81,24 @@ public class ForegroundService extends Service {
             edit.putString("lastNetwork", tetherInterface);
             edit.apply();
 
+            String ipv6Addr = "";
             try {
-                Script.runCommands(tetherInterface, ipv6Masquerading, fixTTL);
+                NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
+                if (netint != null) {
+                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                        if (inetAddress instanceof Inet6Address) {
+                            ipv6Addr = inetAddress.getHostAddress();
+                        }
+                    }
+                }
+                edit.putString("lastIPv6", ipv6Addr);
+                edit.apply();
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
+
+            try {
+                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, fixTTL, ipv6Addr, dnsmasq, getFilesDir().getPath());
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -121,11 +140,14 @@ public class ForegroundService extends Service {
             } else {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 String lastNetwork = sharedPref.getString("lastNetwork", "");
+                String lastIPv6 = sharedPref.getString("lastIPv6", "");
                 Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+                Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
                 Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+                Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
 
                 if (!lastNetwork.equals("")) {
-                    Script.resetInterface(lastNetwork, ipv6Masquerading, fixTTL);
+                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
                 }
 
                 boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
@@ -196,11 +218,14 @@ public class ForegroundService extends Service {
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
+        String lastIPv6 = sharedPref.getString("lastIPv6", "");
         Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+        Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
 
         if (!lastNetwork.equals("")) {
-            Script.resetInterface(lastNetwork, ipv6Masquerading, fixTTL);
+            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
         }
 
         Toast.makeText(this, "Service destroyed by user.", Toast.LENGTH_LONG).show();

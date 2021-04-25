@@ -7,7 +7,7 @@
     tools:ignore="HardcodedText, UseSwitchCompatOrMaterialXml, LabelFor" >
 
     <LinearLayout
-        android:id="@+id/layout1"
+        android:id="@+id/net_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="20pt"
@@ -22,7 +22,7 @@
             android:text="Current Network:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <TextView
-            android:id="@+id/textview1"
+            android:id="@+id/net_textview"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -33,18 +33,18 @@
     </LinearLayout>
 
     <View
-        android:id="@+id/line1"
+        android:id="@+id/line"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_below="@id/layout1"
+        android:layout_below="@id/net_layout"
         android:layout_marginBottom="5pt"
         android:background="@android:color/darker_gray" />
 
     <LinearLayout
-        android:id="@+id/layout2"
+        android:id="@+id/service_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/line1"
+        android:layout_below="@id/line"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
@@ -57,17 +57,17 @@
             android:text="Enable Service:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <Switch
-            android:id="@+id/switch1"
+            android:id="@+id/service_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:checked="false" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/layout3"
+        android:id="@+id/interface_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/layout2"
+        android:layout_below="@id/service_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
@@ -80,17 +80,63 @@
             android:text="Tether Interface:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <Spinner
-            android:id="@+id/spinner1"
+            android:id="@+id/interface_spinner"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/layout4"
+        android:id="@+id/nat_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/layout3"
+        android:layout_below="@id/interface_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="IPv6 NAT:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Spinner
+            android:id="@+id/nat_spinner"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dnsmasq_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/nat_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Enable Dnsmasq:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/dnsmasq_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ttl_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dnsmasq_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
@@ -103,40 +149,17 @@
             android:text="Modify Outgoing TTL:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <Switch
-            android:id="@+id/switch2"
+            android:id="@+id/ttl_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:checked="false" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/layout5"
+        android:id="@+id/wg_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/layout4"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="IPv6 Masquerading:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Switch
-            android:id="@+id/switch3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="false" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/layout6"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/layout5"
+        android:layout_below="@id/ttl_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
@@ -149,17 +172,17 @@
             android:text="Autostart WireGuard:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <Switch
-            android:id="@+id/switch4"
+            android:id="@+id/wg_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:checked="false" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/layout7"
+        android:id="@+id/wgp_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/layout6"
+        android:layout_below="@id/wg_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginRight="20pt"
         android:orientation="horizontal">

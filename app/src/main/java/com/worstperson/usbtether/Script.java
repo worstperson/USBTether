@@ -1,7 +1,8 @@
 package com.worstperson.usbtether;
 
-import com.topjohnwu.superuser.Shell;
+import android.os.Build;
 import android.util.Log;
+import com.topjohnwu.superuser.Shell;
 
 public class Script {
 
@@ -48,11 +49,11 @@ public class Script {
         shellCommand("ndc ipfwd enable tethering");
     }
 
-    static private void set_up_nat(String tetherInterface, Boolean ipv6Masquerading) {
+    static private void set_up_nat(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
         Log.w("USBTether", "Setting up NAT");
         shellCommand("ndc nat enable rndis0 " + tetherInterface + " 99");
         shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
-        if (ipv6Masquerading) {
+        if (ipv6Masquerading || ipv6SNAT) {
             String prefix = "natctrl";
             String counter = prefix+"_tether";
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -66,11 +67,15 @@ public class Script {
             shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -j DROP");
             shellCommand("ip6tables -t nat -N " + prefix + "_nat_POSTROUTING");
             shellCommand("ip6tables -t nat -A POSTROUTING -j " + prefix + "_nat_POSTROUTING");
-            shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+            if (ipv6SNAT) {
+                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
+            } else {
+                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+            }
         }
     }
 
-    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean fixTTL) throws InterruptedException {
+    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String ipv6Addr, Boolean dnsmasq, String appData) throws InterruptedException {
         Log.w("USBTether", "Waiting for tether interface");
         for (int waitTime = 1; waitTime <= 30; waitTime++) {
             if (Shell.su("[ -d \"/sys/class/net/" + tetherInterface + "\" ]").exec().isSuccess()) {
@@ -81,13 +86,18 @@ public class Script {
                     set_ip_addresses();
                     add_marked_routes();
                     enable_ip_forwarding();
-                    set_up_nat(tetherInterface, ipv6Masquerading);
+                    set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
                     if (fixTTL) {
                         // PREROUTING rules cause IPv6 packets to drop
                         shellCommand("iptables -t mangle -A POSTROUTING -o " + tetherInterface + " -j TTL --ttl-set 64");
                         //if (ipv6Masquerading) { //FIXME: breaks mobile connectivity and does not even work afaict
                         //    shellCommand("ip6tables -t mangle -A POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
                         //}
+                    }
+                    if (dnsmasq) {
+                        shellCommand("rm " + appData + "/dnsmasq.leases");
+                        shellCommand("rm " + appData + "/dnsmasq.pid");
+                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::2,fd00::99,slaac,64,1h --dhcp-option=6,8.8.8.8,8.8.4.4 --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                     }
                 } else {
                     Log.w("USBTether", "Tether interface already configured?!?");
@@ -100,17 +110,24 @@ public class Script {
         Log.w("USBTether", "Tether interface never came up");
     }
 
-    static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean fixTTL) {
+    static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String IPv6addr, Boolean dnsmasq) {
+        if (dnsmasq) {
+            shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
+        }
         if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Log.w("USBTether", "Restoring tether interface state");
-            if (ipv6Masquerading) {
+            if (ipv6Masquerading || ipv6SNAT) {
                 String prefix = "natctrl";
                 String counter = prefix + "_tether";
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                     prefix = "tetherctrl";
                     counter = prefix;
                 }
-                shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+                if (ipv6SNAT) {
+                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + IPv6addr);
+                } else {
+                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+                }
                 shellCommand("ip6tables -t nat -D POSTROUTING -j " + prefix + "_nat_POSTROUTING");
                 shellCommand("ip6tables -t nat -X " + prefix + "_nat_POSTROUTING");
                 shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -j DROP");

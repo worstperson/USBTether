@@ -25,6 +25,11 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import com.google.android.material.snackbar.Snackbar;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -62,12 +67,49 @@ public class MainActivity extends AppCompatActivity {
                             Uri.parse("package:" + getPackageName())))).show();
         }
 
-        TextView textview1 = findViewById(R.id.textview1);
-        Switch switch1 = findViewById(R.id.switch1);
-        Switch switch2 = findViewById(R.id.switch2);
-        Switch switch3 = findViewById(R.id.switch3);
-        Switch switch4 = findViewById(R.id.switch4);
-        Spinner spinner1 = findViewById(R.id.spinner1);
+        File file = new File(getFilesDir().getPath() + "/dnsmasq.armeabi-v7a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.dnsmasq_arm)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/dnsmasq.arm64-v8a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.dnsmasq_arm64)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        TextView net_textview = findViewById(R.id.net_textview);
+        Switch service_switch = findViewById(R.id.service_switch);
+        Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
+        Switch ttl_switch = findViewById(R.id.ttl_switch);
+        Switch wg_switch = findViewById(R.id.wg_switch);
+        Spinner interface_spinner = findViewById(R.id.interface_spinner);
+        Spinner nat_spinner = findViewById(R.id.nat_spinner);
         EditText edittext1 = findViewById(R.id.edittext1);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -77,23 +119,25 @@ public class MainActivity extends AppCompatActivity {
                 LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
                 if (linkProperties != null) {
                     String name = linkProperties.getInterfaceName();
-                    textview1.setText(name);
+                    net_textview.setText(name);
                 }
             }
         }
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
+        boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+        boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
         String tetherInterface = sharedPref.getString("tetherInterface", "");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
 
-        switch1.setChecked(serviceEnabled);
-        switch2.setChecked(fixTTL);
-        switch3.setChecked(ipv6Masquerading);
-        switch4.setChecked(startWireGuard);
+        service_switch.setChecked(serviceEnabled);
+        dnsmasq_switch.setChecked(dnsmasq);
+        ttl_switch.setChecked(fixTTL);
+        wg_switch.setChecked(startWireGuard);
 
         edittext1.setText(wireguardProfile);
 
@@ -119,22 +163,42 @@ public class MainActivity extends AppCompatActivity {
         }
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner1.setAdapter(adapter);
+        interface_spinner.setAdapter(adapter);
 
-        if (serviceEnabled) {
-            switch2.setEnabled(false);
-            switch3.setEnabled(false);
-            switch4.setEnabled(false);
-            edittext1.setEnabled(false);
-            spinner1.setEnabled(false);
+        ArrayList<String> arraySpinner2 = new ArrayList<>();
+        arraySpinner2.add("None");
+        arraySpinner2.add("Masquerading");
+        arraySpinner2.add("SNAT");
+
+        ArrayAdapter<String> adapter2 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner2);
+        adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        nat_spinner.setAdapter(adapter2);
+
+        int position = 0;
+        if (ipv6Masquerading) {
+            position = 1;
+        } else if (ipv6SNAT) {
+            position = 2;
         }
 
-        switch1.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            switch2.setEnabled(!isChecked);
-            switch3.setEnabled(!isChecked);
-            switch4.setEnabled(!isChecked);
+        nat_spinner.setSelection(position);
+
+        if (serviceEnabled) {
+            dnsmasq_switch.setEnabled(false);
+            ttl_switch.setEnabled(false);
+            wg_switch.setEnabled(false);
+            edittext1.setEnabled(false);
+            interface_spinner.setEnabled(false);
+            nat_spinner.setEnabled(false);
+        }
+
+        service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            dnsmasq_switch.setEnabled(!isChecked);
+            ttl_switch.setEnabled(!isChecked);
+            wg_switch.setEnabled(!isChecked);
             edittext1.setEnabled(!isChecked);
-            spinner1.setEnabled(!isChecked);
+            interface_spinner.setEnabled(!isChecked);
+            nat_spinner.setEnabled(!isChecked);
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("serviceEnabled", isChecked);
             edit.apply();
@@ -150,30 +214,52 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        switch2.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        dnsmasq_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            SharedPreferences.Editor edit = sharedPref.edit();
+            edit.putBoolean("dnsmasq", isChecked);
+            edit.apply();
+        });
+
+        ttl_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("fixTTL", isChecked);
             edit.apply();
         });
 
-        switch3.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("ipv6Masquerading", isChecked);
-            edit.apply();
-        });
-
-        switch4.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        wg_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("startWireGuard", isChecked);
             edit.apply();
         });
 
-        spinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        interface_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 Object item = adapterView.getItemAtPosition(position);
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putString("tetherInterface", item.toString());
+                edit.apply();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+
+        nat_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                Object item = adapterView.getItemAtPosition(position);
+                SharedPreferences.Editor edit = sharedPref.edit();
+                if (item.equals("Masquerading")) {
+                    edit.putBoolean("ipv6Masquerading", true);
+                    edit.putBoolean("ipv6SNAT", false);
+                } else if (item.equals("SNAT")) {
+                    edit.putBoolean("ipv6Masquerading", false);
+                    edit.putBoolean("ipv6SNAT", true);
+                } else {
+                    edit.putBoolean("ipv6Masquerading", false);
+                    edit.putBoolean("ipv6SNAT", false);
+                }
                 edit.apply();
             }
             @Override
@@ -205,7 +291,7 @@ public class MainActivity extends AppCompatActivity {
     public void onResume(){
         super.onResume();
 
-        Spinner spinner1 = findViewById(R.id.spinner1);
+        Spinner interface_spinner = findViewById(R.id.interface_spinner);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "");
@@ -232,6 +318,6 @@ public class MainActivity extends AppCompatActivity {
         }
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner1.setAdapter(adapter);
+        interface_spinner.setAdapter(adapter);
     }
 }
