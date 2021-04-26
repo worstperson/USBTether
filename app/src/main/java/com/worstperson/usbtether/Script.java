@@ -83,21 +83,21 @@ public class Script {
                 if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
                     Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
                     Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done; sleep 2").exec();
+                    Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 2").exec();
                     set_ip_addresses();
                     add_marked_routes();
                     enable_ip_forwarding();
                     set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
                     if (fixTTL) {
-                        // PREROUTING rules cause IPv6 packets to drop
-                        shellCommand("iptables -t mangle -A POSTROUTING -o " + tetherInterface + " -j TTL --ttl-set 64");
-                        //if (ipv6Masquerading) { //FIXME: breaks mobile connectivity and does not even work afaict
-                        //    shellCommand("ip6tables -t mangle -A POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
-                        //}
+                        shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
+                        if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
+                            shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
+                        }
                     }
                     if (dnsmasq) {
                         shellCommand("rm " + appData + "/dnsmasq.leases");
                         shellCommand("rm " + appData + "/dnsmasq.pid");
-                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::2,fd00::99,slaac,64,1h --dhcp-option=6,8.8.8.8,8.8.4.4 --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::2,fd00::99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                     }
                 } else {
                     Log.w("USBTether", "Tether interface already configured?!?");
@@ -144,8 +144,8 @@ public class Script {
             shellCommand("ndc ipfwd disable tethering");
             Shell.su("setprop sys.usb.config \"adb\"").exec();
             if (fixTTL) {
-                shellCommand("iptables -t mangle -D POSTROUTING -o " + tetherInterface + " -j TTL --ttl-set 64");
-                //shellCommand("ip6tables -t mangle -D POSTROUTING -o " + tetherInterface + " -j HL --hl-set 64");
+                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
+                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");

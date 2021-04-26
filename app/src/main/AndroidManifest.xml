@@ -30,7 +30,7 @@
             android:enabled="true"
             android:exported="false">
             <intent-filter >
-                <action android:name="android.intent.action.ACTION_POWER_CONNECTED"/>
+                <action android:name="android.hardware.usb.action.USB_STATE" />
             </intent-filter>
         </service>
         <receiver

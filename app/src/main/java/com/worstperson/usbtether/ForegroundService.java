@@ -13,7 +13,6 @@ import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
-import android.os.BatteryManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
@@ -37,10 +36,11 @@ public class ForegroundService extends Service {
     WakeLock wakeLock;
 
     static public Boolean isStarted = false;
+    public Boolean tetherActive = false;
 
     @SuppressLint("NewApi")
     private void runScript() {
-        unregisterReceiver(PowerReceiver); //Required for < android.os.Build.VERSION_CODES.P
+        unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "");
@@ -105,39 +105,38 @@ public class ForegroundService extends Service {
         }
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_POWER_CONNECTED);
-        filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
-        registerReceiver(PowerReceiver, filter);
+        filter.addAction("android.hardware.usb.action.USB_STATE");
+        registerReceiver(USBReceiver, filter);
     }
 
-    private void checkHost(Context context) {
-        Intent batteryStatus = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        if (batteryStatus != null && batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) == BatteryManager.BATTERY_PLUGGED_USB) {
-            Log.w("USBTether", "Connected to tetherable device");
-
-            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
-            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-            if (startWireGuard) {
-                Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
-                i.setPackage("com.wireguard.android");
-                i.putExtra("tunnel", wireguardProfile);
-                sendBroadcast(i);
-            }
-
-            runScript();
-        } else {
-            Log.w("USBTether", "Not connected to tetherable device");
-        }
-    }
-
-    private final BroadcastReceiver PowerReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (action != null && action.equals(Intent.ACTION_POWER_CONNECTED)) {
-                checkHost(context);
+            // Some devices go into Discharging state rather then Not Charging
+            // when charge control apps are used, so we can't use BatteryManager
+            if (intent.getExtras().getBoolean("connected")) {
+                Log.i("usbtether", "USB Connected");
+                if (intent.getExtras().getBoolean("configured")) {
+                    if (!tetherActive) {
+                        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                        boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
+                        String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+                        if (startWireGuard) {
+                            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+                            i.setPackage("com.wireguard.android");
+                            i.putExtra("tunnel", wireguardProfile);
+                            sendBroadcast(i);
+                        }
+                        runScript();
+                        tetherActive = true;
+                    } else {
+                        Log.i("usbtether", "Tethering already active");
+                    }
+                } else {
+                    Log.i("usbtether", "Interface not yet configured");
+                }
             } else {
+                Log.i("usbtether", "USB Disconnected");
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 String lastNetwork = sharedPref.getString("lastNetwork", "");
                 String lastIPv6 = sharedPref.getString("lastIPv6", "");
@@ -149,6 +148,7 @@ public class ForegroundService extends Service {
                 if (!lastNetwork.equals("")) {
                     Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
                 }
+                tetherActive = false;
 
                 boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -199,11 +199,8 @@ public class ForegroundService extends Service {
         startForeground(1, notification);
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_POWER_CONNECTED);
-        filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
-        registerReceiver(PowerReceiver, filter);
-
-        checkHost(this);
+        filter.addAction("android.hardware.usb.action.USB_STATE");
+        registerReceiver(USBReceiver, filter);
 
         return Service.START_STICKY;
     }
@@ -214,7 +211,7 @@ public class ForegroundService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
         }
-        unregisterReceiver(PowerReceiver);
+        unregisterReceiver(USBReceiver);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -227,6 +224,7 @@ public class ForegroundService extends Service {
         if (!lastNetwork.equals("")) {
             Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
         }
+        tetherActive = false;
 
         Toast.makeText(this, "Service destroyed by user.", Toast.LENGTH_LONG).show();
     }
