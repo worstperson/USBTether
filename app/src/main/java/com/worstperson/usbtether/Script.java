@@ -75,7 +75,7 @@ public class Script {
         }
     }
 
-    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String ipv6Addr, Boolean dnsmasq, int mtu, String appData) throws InterruptedException {
+    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String ipv6Addr, Boolean dnsmasq, String appData) throws InterruptedException {
         Log.w("USBTether", "Waiting for tether interface");
         for (int waitTime = 1; waitTime <= 30; waitTime++) {
             if (Shell.su("[ -d \"/sys/class/net/" + tetherInterface + "\" ]").exec().isSuccess()) {
@@ -88,6 +88,7 @@ public class Script {
                     add_marked_routes();
                     enable_ip_forwarding();
                     set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
+                    shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
                     if (fixTTL) {
                         shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
                         if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
@@ -98,7 +99,7 @@ public class Script {
                         shellCommand("rm " + appData + "/dnsmasq.leases");
                         shellCommand("rm " + appData + "/dnsmasq.pid");
                         //TODO: --ra-param=mtu:1280 does not work
-                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::2,fd00::99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=option:mtu," + mtu + " --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::2,fd00::99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                     }
                 } else {
                     Log.w("USBTether", "Tether interface already configured?!?");
@@ -144,6 +145,7 @@ public class Script {
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
             Shell.su("setprop sys.usb.config \"adb\"").exec();
+            shellCommand("ip6tables -t mangle -D tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
             if (fixTTL) {
                 shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
                 shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");

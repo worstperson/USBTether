@@ -97,15 +97,8 @@ public class ForegroundService extends Service {
                 e.printStackTrace();
             }
 
-            int mtu = 1500;
             try {
-                mtu = NetworkInterface.getByName(tetherInterface).getMTU();
-            } catch (SocketException e) {
-                e.printStackTrace();
-            }
-
-            try {
-                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, fixTTL, ipv6Addr, dnsmasq, mtu, getFilesDir().getPath());
+                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, fixTTL, ipv6Addr, dnsmasq, getFilesDir().getPath());
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
