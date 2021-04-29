@@ -42,7 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
     PowerManager powerManager;
 
-    @SuppressLint({"NewApi", "UseSwitchCompatOrMaterialCode", "BatteryLife"})
+    @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -180,7 +180,6 @@ public class MainActivity extends AppCompatActivity {
         } else if (ipv6SNAT) {
             position = 2;
         }
-
         nat_spinner.setSelection(position);
 
         if (serviceEnabled) {
@@ -291,7 +290,20 @@ public class MainActivity extends AppCompatActivity {
     public void onResume(){
         super.onResume();
 
+        TextView net_textview = findViewById(R.id.net_textview);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
+
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            Network activeNetwork = connectivityManager.getActiveNetwork();
+            if (activeNetwork != null) {
+                LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
+                if (linkProperties != null) {
+                    String name = linkProperties.getInterfaceName();
+                    net_textview.setText(name);
+                }
+            }
+        }
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "");

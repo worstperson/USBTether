@@ -18,6 +18,7 @@ import android.os.IBinder;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
+
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 
@@ -38,7 +39,6 @@ public class ForegroundService extends Service {
     static public Boolean isStarted = false;
     public Boolean tetherActive = false;
 
-    @SuppressLint("NewApi")
     private void runScript() {
         unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
 
@@ -225,6 +225,7 @@ public class ForegroundService extends Service {
             Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
         }
         tetherActive = false;
+        isStarted = false;
 
         Toast.makeText(this, "Service destroyed by user.", Toast.LENGTH_LONG).show();
     }
