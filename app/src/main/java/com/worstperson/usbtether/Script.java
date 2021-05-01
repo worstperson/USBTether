@@ -20,9 +20,9 @@ public class Script {
 
     }
 
-    static private void set_ip_addresses() throws InterruptedException {
+    static private void set_ip_addresses(String ipv6Prefix) throws InterruptedException {
         Log.w("USBTether", "Setting IP addresses");
-        shellCommand("ip -6 addr add fd00::1/64 dev rndis0 scope global");
+        shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
         shellCommand("ndc interface setcfg rndis0 192.168.42.129 24 up");
         Log.w("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 10; waitTime++) {
@@ -33,14 +33,14 @@ public class Script {
             Thread.sleep(1000);
         }
         Thread.sleep(3000);
-        shellCommand("ip -6 route add fd00::/64 dev rndis0 src fd00::1");
+        shellCommand("ip -6 route add 2001:db8::/64 dev rndis0 src " + ipv6Prefix + "1");
     }
 
-    static private void add_marked_routes() {
+    static private void add_marked_routes(String ipv6Prefix) {
         Log.w("USBTether", "Adding marked routes");
         shellCommand("ndc network interface add 99 rndis0");
         shellCommand("ndc network route add 99 rndis0 192.168.42.0/24");
-        shellCommand("ndc network route add 99 rndis0 fd00::/64");
+        shellCommand("ndc network route add 99 rndis0 " + ipv6Prefix + "/64");
         shellCommand("ndc network route add 99 rndis0 fe80::/64");
     }
 
@@ -75,44 +75,34 @@ public class Script {
         }
     }
 
-    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String ipv6Addr, Boolean dnsmasq, String appData) throws InterruptedException {
-        Log.w("USBTether", "Waiting for tether interface");
-        for (int waitTime = 1; waitTime <= 30; waitTime++) {
-            if (Shell.su("[ -d \"/sys/class/net/" + tetherInterface + "\" ]").exec().isSuccess()) {
-                Thread.sleep(3000);
-                if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
-                    Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
-                    Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done; sleep 2").exec();
-                    Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 2").exec();
-                    set_ip_addresses();
-                    add_marked_routes();
-                    enable_ip_forwarding();
-                    set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
-                    shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
-                    if (fixTTL) {
-                        shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
-                        if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
-                            shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
-                        }
-                    }
-                    if (dnsmasq) {
-                        shellCommand("rm " + appData + "/dnsmasq.leases");
-                        shellCommand("rm " + appData + "/dnsmasq.pid");
-                        //TODO: --ra-param=mtu:1280 does not work
-                        shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=fd00::10,fd00::99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
-                    }
-                } else {
-                    Log.w("USBTether", "Tether interface already configured?!?");
+    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) throws InterruptedException {
+        if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
+            Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
+            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done; sleep 2").exec();
+            Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 2").exec();
+            set_ip_addresses(ipv6Prefix);
+            add_marked_routes(ipv6Prefix);
+            enable_ip_forwarding();
+            set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
+            shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
+            if (fixTTL) {
+                shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
+                if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
+                    shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
                 }
-                return;
             }
-            Log.w("USBTether", String.valueOf(waitTime));
-            Thread.sleep(1000);
+            if (dnsmasq) {
+                shellCommand("rm " + appData + "/dnsmasq.leases");
+                shellCommand("rm " + appData + "/dnsmasq.pid");
+                //TODO: --ra-param=mtu:1280 does not work
+                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+            }
+        } else {
+            Log.w("USBTether", "Tether interface already configured?!?");
         }
-        Log.w("USBTether", "Tether interface never came up");
     }
 
-    static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, Boolean fixTTL, String IPv6addr, Boolean dnsmasq) {
+    static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
@@ -140,7 +130,7 @@ public class Script {
             shellCommand("ndc ipfwd remove rndis0 " + tetherInterface);
             shellCommand("ndc nat disable rndis0 " + tetherInterface + " 99");
             shellCommand("ndc network interface remove 99 rndis0");
-            shellCommand("ip -6 route del fd00::/64 dev rndis0 src fd00::1");
+            shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
             shellCommand("ndc interface clearaddrs rndis0");
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");

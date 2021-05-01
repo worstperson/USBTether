@@ -110,10 +110,33 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dnsmasq_layout"
+        android:id="@+id/prefix_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/nat_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="IPv6 Prefix:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Spinner
+            android:id="@+id/prefix_spinner"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dnsmasq_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/prefix_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
@@ -146,7 +169,7 @@
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:text="Modify Outgoing TTL:"
+            android:text="Modify TTL/HL:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <Switch
             android:id="@+id/ttl_switch"
@@ -193,7 +216,7 @@
             android:text="WireGuard Profile:"
             android:textAppearance="?android:attr/textAppearanceMedium" />
         <EditText
-            android:id="@+id/edittext1"
+            android:id="@+id/wg_text"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"

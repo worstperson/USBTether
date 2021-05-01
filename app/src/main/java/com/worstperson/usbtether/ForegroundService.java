@@ -48,6 +48,9 @@ public class ForegroundService extends Service {
         Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
+        boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
+
+        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
         if (tetherInterface.equals("Auto")) {
             ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -83,11 +86,39 @@ public class ForegroundService extends Service {
 
             String ipv6Addr = "";
             try {
-                NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
-                if (netint != null) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                        if (inetAddress instanceof Inet6Address) {
-                            ipv6Addr = inetAddress.getHostAddress();
+                if (ipv6SNAT) {
+                    if (startWireGuard) { // TODO - tetherInterface == tun0/wireguardProfile
+                        //We need to wait for the interface to become configured
+                        int count = 1;
+                        while (count < 30) { // this is too long, but sometimes required
+                            NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
+                            if (netint != null) {
+                                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                                    if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
+                                        ipv6Addr = inetAddress.getHostAddress();
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!ipv6Addr.equals("")) {
+                                break;
+                            }
+                            try {
+                                Thread.sleep(1000);
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                            count = count + 1;
+                        }
+                    } else {
+                        NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
+                        if (netint != null) {
+                            for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                                if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
+                                    ipv6Addr = inetAddress.getHostAddress();
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -98,7 +129,7 @@ public class ForegroundService extends Service {
             }
 
             try {
-                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, fixTTL, ipv6Addr, dnsmasq, getFilesDir().getPath());
+                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -126,6 +157,7 @@ public class ForegroundService extends Service {
                             i.setPackage("com.wireguard.android");
                             i.putExtra("tunnel", wireguardProfile);
                             sendBroadcast(i);
+                            //TODO - Wait for interface to come up, otherwise AUTO is not likely to work (tun0 or wireguardProfile)
                         }
                         runScript();
                         tetherActive = true;
@@ -145,8 +177,10 @@ public class ForegroundService extends Service {
                 Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
                 Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
 
+                String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+
                 if (!lastNetwork.equals("")) {
-                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
+                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                 }
                 tetherActive = false;
 
@@ -221,8 +255,10 @@ public class ForegroundService extends Service {
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
 
+        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+
         if (!lastNetwork.equals("")) {
-            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, fixTTL, lastIPv6, dnsmasq);
+            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
         }
         tetherActive = false;
         isStarted = false;

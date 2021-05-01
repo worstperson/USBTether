@@ -110,7 +110,8 @@ public class MainActivity extends AppCompatActivity {
         Switch wg_switch = findViewById(R.id.wg_switch);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
-        EditText edittext1 = findViewById(R.id.edittext1);
+        Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
+        EditText wg_text = findViewById(R.id.wg_text);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
@@ -130,8 +131,9 @@ public class MainActivity extends AppCompatActivity {
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+        boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
         boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
-        String tetherInterface = sharedPref.getString("tetherInterface", "");
+        String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
 
         service_switch.setChecked(serviceEnabled);
@@ -139,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
         ttl_switch.setChecked(fixTTL);
         wg_switch.setChecked(startWireGuard);
 
-        edittext1.setText(wireguardProfile);
+        wg_text.setText(wireguardProfile);
 
         ArrayList<String> arraySpinner = new ArrayList<>();
         arraySpinner.add(tetherInterface);
@@ -169,11 +171,9 @@ public class MainActivity extends AppCompatActivity {
         arraySpinner2.add("None");
         arraySpinner2.add("Masquerading");
         arraySpinner2.add("SNAT");
-
         ArrayAdapter<String> adapter2 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner2);
         adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         nat_spinner.setAdapter(adapter2);
-
         int position = 0;
         if (ipv6Masquerading) {
             position = 1;
@@ -182,11 +182,19 @@ public class MainActivity extends AppCompatActivity {
         }
         nat_spinner.setSelection(position);
 
+        ArrayList<String> arraySpinner3 = new ArrayList<>();
+        arraySpinner3.add("ULA (fd00::)");     // Prefer IPv4
+        arraySpinner3.add("GUA (2001:db8::)"); // Prefer IPv6
+        ArrayAdapter<String> adapter3 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner3);
+        adapter3.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        prefix_spinner.setAdapter(adapter3);
+        prefix_spinner.setSelection(ipv6Default ? 1 : 0);
+
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
             wg_switch.setEnabled(false);
-            edittext1.setEnabled(false);
+            wg_text.setEnabled(false);
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
         }
@@ -195,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
             dnsmasq_switch.setEnabled(!isChecked);
             ttl_switch.setEnabled(!isChecked);
             wg_switch.setEnabled(!isChecked);
-            edittext1.setEnabled(!isChecked);
+            wg_text.setEnabled(!isChecked);
             interface_spinner.setEnabled(!isChecked);
             nat_spinner.setEnabled(!isChecked);
             SharedPreferences.Editor edit = sharedPref.edit();
@@ -266,10 +274,22 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        edittext1.setOnEditorActionListener((v, actionId, event) -> {
+        prefix_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("ipv6Default", position == 1);
+                edit.apply();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+
+        wg_text.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putString("wireguardProfile", String.valueOf(edittext1.getText()));
+                edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
                 edit.apply();
                 return true;
             }
