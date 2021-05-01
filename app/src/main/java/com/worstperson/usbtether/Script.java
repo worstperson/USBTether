@@ -33,7 +33,7 @@ public class Script {
             Thread.sleep(1000);
         }
         Thread.sleep(3000);
-        shellCommand("ip -6 route add 2001:db8::/64 dev rndis0 src " + ipv6Prefix + "1");
+        shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
     }
 
     static private void add_marked_routes(String ipv6Prefix) {
