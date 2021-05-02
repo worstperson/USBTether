@@ -15,21 +15,21 @@ public class Script {
 
     static private void shellCommand(String command) {
         for ( String message : Shell.su(command).exec().getOut() ) {
-            Log.w("USBTether", message);
+            Log.i("USBTether", message);
         }
 
     }
 
     static private void set_ip_addresses(String ipv6Prefix) throws InterruptedException {
-        Log.w("USBTether", "Setting IP addresses");
+        Log.i("USBTether", "Setting IP addresses");
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
         shellCommand("ndc interface setcfg rndis0 192.168.42.129 24 up");
-        Log.w("USBTether", "Waiting for interface to come up");
+        Log.i("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 10; waitTime++) {
             if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
                 break;
             }
-            Log.w("USBTether", String.valueOf(waitTime));
+            Log.i("USBTether", String.valueOf(waitTime));
             Thread.sleep(1000);
         }
         Thread.sleep(3000);
@@ -37,7 +37,7 @@ public class Script {
     }
 
     static private void add_marked_routes(String ipv6Prefix) {
-        Log.w("USBTether", "Adding marked routes");
+        Log.i("USBTether", "Adding marked routes");
         shellCommand("ndc network interface add 99 rndis0");
         shellCommand("ndc network route add 99 rndis0 192.168.42.0/24");
         shellCommand("ndc network route add 99 rndis0 " + ipv6Prefix + "/64");
@@ -45,12 +45,12 @@ public class Script {
     }
 
     static private void enable_ip_forwarding() {
-        Log.w("USBTether", "Enabling IP forwarding");
+        Log.i("USBTether", "Enabling IP forwarding");
         shellCommand("ndc ipfwd enable tethering");
     }
 
     static private void set_up_nat(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
-        Log.w("USBTether", "Setting up NAT");
+        Log.i("USBTether", "Setting up NAT");
         shellCommand("ndc nat enable rndis0 " + tetherInterface + " 99");
         shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
         if (ipv6Masquerading || ipv6SNAT) {
@@ -65,6 +65,7 @@ public class Script {
             shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -m state --state INVALID -j DROP");
             shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -g " + counter + "_counters");
             shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -j DROP");
+            shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
             shellCommand("ip6tables -t nat -N " + prefix + "_nat_POSTROUTING");
             shellCommand("ip6tables -t nat -A POSTROUTING -j " + prefix + "_nat_POSTROUTING");
             if (ipv6SNAT) {
@@ -75,16 +76,25 @@ public class Script {
         }
     }
 
-    static void runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) throws InterruptedException {
+    static boolean runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) throws InterruptedException {
         if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
-            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done; sleep 2").exec();
-            Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 2").exec();
+            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done").exec();
+            Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 1").exec(); // Stupid? Maybe...
+
+            // Check that rndis0 is actually available to avoid wasting time
+            // Seems dumb, but checking this twice helps with false negatives
+            if ( !Shell.su("ip link set dev rndis0 down").exec().isSuccess()  || !Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
+                Log.w("usbtether", "Aborting tether...");
+                Shell.su("setprop sys.usb.config \"adb\"").exec();
+                Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
+                return false;
+            }
+
             set_ip_addresses(ipv6Prefix);
             add_marked_routes(ipv6Prefix);
             enable_ip_forwarding();
             set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
-            shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
             if (fixTTL) {
                 shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
                 if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
@@ -100,6 +110,7 @@ public class Script {
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
+        return true;
     }
 
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
@@ -107,7 +118,11 @@ public class Script {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
         if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
-            Log.w("USBTether", "Restoring tether interface state");
+            Log.i("USBTether", "Restoring tether interface state");
+            if (fixTTL) {
+                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
+                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
+            }
             if (ipv6Masquerading || ipv6SNAT) {
                 String prefix = "natctrl";
                 String counter = prefix + "_tether";
@@ -122,6 +137,7 @@ public class Script {
                 }
                 shellCommand("ip6tables -t nat -D POSTROUTING -j " + prefix + "_nat_POSTROUTING");
                 shellCommand("ip6tables -t nat -X " + prefix + "_nat_POSTROUTING");
+                shellCommand("ip6tables -t mangle -D tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
                 shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -j DROP");
                 shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -g " + counter + "_counters");
                 shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -m state --state INVALID -j DROP");
@@ -135,11 +151,6 @@ public class Script {
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
             Shell.su("setprop sys.usb.config \"adb\"").exec();
-            shellCommand("ip6tables -t mangle -D tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
-            if (fixTTL) {
-                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
-                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
-            }
         } else {
             Log.w("USBTether", "Tether interface not configured");
         }

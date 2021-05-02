@@ -197,6 +197,7 @@ public class MainActivity extends AppCompatActivity {
             wg_text.setEnabled(false);
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
+            prefix_spinner.setEnabled(false);
         }
 
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -206,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
             wg_text.setEnabled(!isChecked);
             interface_spinner.setEnabled(!isChecked);
             nat_spinner.setEnabled(!isChecked);
+            prefix_spinner.setEnabled(!isChecked);
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("serviceEnabled", isChecked);
             edit.apply();

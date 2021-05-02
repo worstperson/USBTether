@@ -39,7 +39,8 @@ public class ForegroundService extends Service {
     static public Boolean isStarted = false;
     public Boolean tetherActive = false;
 
-    private void runScript() {
+    private boolean runScript() {
+        boolean returnCode = false;
         unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
@@ -129,7 +130,7 @@ public class ForegroundService extends Service {
             }
 
             try {
-                Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                returnCode = Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -138,6 +139,8 @@ public class ForegroundService extends Service {
         IntentFilter filter = new IntentFilter();
         filter.addAction("android.hardware.usb.action.USB_STATE");
         registerReceiver(USBReceiver, filter);
+
+        return returnCode;
     }
 
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
@@ -145,6 +148,7 @@ public class ForegroundService extends Service {
         public void onReceive(Context context, Intent intent) {
             // Some devices go into Discharging state rather then Not Charging
             // when charge control apps are used, so we can't use BatteryManager
+            // This actually works way better anyway, even though it's undocumented
             if (intent.getExtras().getBoolean("connected")) {
                 Log.i("usbtether", "USB Connected");
                 if (intent.getExtras().getBoolean("configured")) {
@@ -159,8 +163,7 @@ public class ForegroundService extends Service {
                             sendBroadcast(i);
                             //TODO - Wait for interface to come up, otherwise AUTO is not likely to work (tun0 or wireguardProfile)
                         }
-                        runScript();
-                        tetherActive = true;
+                        tetherActive = runScript();
                     } else {
                         Log.i("usbtether", "Tethering already active");
                     }
