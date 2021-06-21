@@ -130,7 +130,7 @@ public class ForegroundService extends Service {
             }
 
             try {
-                returnCode = Script.runCommands(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                returnCode = Script.configureInterface(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -153,6 +153,7 @@ public class ForegroundService extends Service {
                 Log.i("usbtether", "USB Connected");
                 if (intent.getExtras().getBoolean("configured")) {
                     if (!tetherActive) {
+                        Log.i("usbtether", "Configuring interface...");
                         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                         boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
                         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -165,10 +166,15 @@ public class ForegroundService extends Service {
                         }
                         tetherActive = runScript();
                     } else {
-                        Log.i("usbtether", "Tethering already active");
+                        Log.i("usbtether", "Restoring IP addresses and routes...");
+                        // Google One VPN is trash and reconnects all the time, just restore it for now
+                        // This gets called right after setting up a connection, FIXME
+                        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+                        Script.restoreInterface(ipv6Prefix);
                     }
                 } else {
-                    Log.i("usbtether", "Interface not yet configured");
+                    Log.i("usbtether", "Interface not yet ready");
                 }
             } else {
                 Log.i("usbtether", "USB Disconnected");
@@ -179,7 +185,6 @@ public class ForegroundService extends Service {
                 Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
                 Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
                 Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
-
                 String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
                 if (!lastNetwork.equals("")) {
@@ -235,9 +240,8 @@ public class ForegroundService extends Service {
 
         startForeground(1, notification);
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction("android.hardware.usb.action.USB_STATE");
-        registerReceiver(USBReceiver, filter);
+        IntentFilter intentFilter = new IntentFilter("android.hardware.usb.action.USB_STATE");
+        registerReceiver(USBReceiver, intentFilter);
 
         return Service.START_STICKY;
     }

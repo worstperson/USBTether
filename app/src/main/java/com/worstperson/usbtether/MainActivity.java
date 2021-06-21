@@ -328,7 +328,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        String tetherInterface = sharedPref.getString("tetherInterface", "");
+        String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
 
         ArrayList<String> arraySpinner = new ArrayList<>();
         arraySpinner.add(tetherInterface);

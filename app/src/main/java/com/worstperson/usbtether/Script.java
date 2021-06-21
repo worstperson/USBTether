@@ -76,11 +76,10 @@ public class Script {
         }
     }
 
-    static boolean runCommands(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) throws InterruptedException {
+    static boolean configureInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) throws InterruptedException {
         if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
             Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done").exec();
-            Shell.su("until [ -d \"/sys/class/net/rndis0\" ]; do sleep 1; done; sleep 1").exec(); // Stupid? Maybe...
 
             // Check that rndis0 is actually available to avoid wasting time
             // Seems dumb, but checking this twice helps with false negatives
@@ -91,8 +90,6 @@ public class Script {
                 return false;
             }
 
-            set_ip_addresses(ipv6Prefix);
-            add_marked_routes(ipv6Prefix);
             enable_ip_forwarding();
             set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
             if (fixTTL) {
@@ -111,6 +108,21 @@ public class Script {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
         return true;
+    }
+
+    static void restoreInterface(String ipv6Prefix) {
+        if ( !Shell.su("ip link set dev rndis0 down").exec().isSuccess()  || !Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
+            Log.w("usbtether", "Aborting tether...");
+            Shell.su("setprop sys.usb.config \"adb\"").exec();
+            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
+        } else {
+            try {
+                set_ip_addresses(ipv6Prefix);
+                add_marked_routes(ipv6Prefix);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {

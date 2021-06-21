@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS"/>
+    <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS" />
 
     <application
         android:icon="@mipmap/ic_launcher"
