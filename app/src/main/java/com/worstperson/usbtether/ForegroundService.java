@@ -69,32 +69,6 @@ public class ForegroundService extends Service {
         return tetherInterface;
     }
 
-    private String setupSNAT (String tetherInterface, Boolean ipv6SNAT, boolean startWireGuard, SharedPreferences sharedPref) {
-        SharedPreferences.Editor edit = sharedPref.edit();
-        edit.putString("lastNetwork", tetherInterface);
-        edit.apply();
-
-        String ipv6Addr = "";
-        try {
-            if (ipv6SNAT) {
-                NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
-                if (netint != null) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                        if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
-                            ipv6Addr = inetAddress.getHostAddress();
-                            break;
-                        }
-                    }
-                }
-            }
-            edit.putString("lastIPv6", ipv6Addr);
-            edit.apply();
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
-        return ipv6Addr;
-    }
-
     private boolean waitInterface(String tetherInterface) {
         //We need to wait for the interface to become configured
         int count = 1;
@@ -113,7 +87,28 @@ public class ForegroundService extends Service {
             }
             count = count + 1;
         }
+        Log.i("usbtether", "Waiting for " + tetherInterface + "..." + count);
         return false;
+    }
+
+    private String setupSNAT(String tetherInterface, Boolean ipv6SNAT) {
+        String ipv6Addr = "";
+        try {
+            if (ipv6SNAT) {
+                NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
+                if (netint != null) {
+                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                        if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
+                            ipv6Addr = inetAddress.getHostAddress();
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        return ipv6Addr;
     }
 
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
@@ -149,7 +144,11 @@ public class ForegroundService extends Service {
                         unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
                         tetherInterface = pickInterface(tetherInterface);
                         if (tetherInterface != null && !tetherInterface.equals("") && !tetherInterface.equals("Auto") && waitInterface(tetherInterface)) {
-                            String ipv6Addr = setupSNAT (tetherInterface, ipv6SNAT, startWireGuard, sharedPref);
+                            String ipv6Addr = setupSNAT(tetherInterface, ipv6SNAT);
+                            SharedPreferences.Editor edit = sharedPref.edit();
+                            edit.putString("lastNetwork", tetherInterface);
+                            edit.putString("lastIPv6", ipv6Addr);
+                            edit.apply();
                             try {
                                 returnCode = Script.configureInterface(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
                             } catch (InterruptedException e) {
