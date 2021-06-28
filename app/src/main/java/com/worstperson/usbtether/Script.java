@@ -17,23 +17,30 @@ public class Script {
         for ( String message : Shell.su(command).exec().getOut() ) {
             Log.i("USBTether", message);
         }
-
     }
 
-    static private void set_ip_addresses(String ipv6Prefix) throws InterruptedException {
+    static private boolean set_ip_addresses(String ipv6Prefix) {
         Log.i("USBTether", "Setting IP addresses");
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
         shellCommand("ndc interface setcfg rndis0 192.168.42.129 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
-        for (int waitTime = 1; waitTime <= 10; waitTime++) {
+        for (int waitTime = 1; waitTime <= 3; waitTime++) {
             if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
                 break;
             }
-            Log.i("USBTether", String.valueOf(waitTime));
-            Thread.sleep(1000);
+            Log.i("USBTether", "waiting... " + waitTime);
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
-        Thread.sleep(3000);
-        shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
+        if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
+            shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
+            return true;
+        } else {
+            return false;
+        }
     }
 
     static private void add_marked_routes(String ipv6Prefix) {
@@ -93,7 +100,6 @@ public class Script {
             Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
             return false;
         } else {
-            Log.i("usbtether", "Setting up NAT...");
             enable_ip_forwarding();
             set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
             if (fixTTL) {
@@ -105,17 +111,23 @@ public class Script {
             if (dnsmasq) {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
-                //TODO: --ra-param=mtu:1280 does not work
-                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                // removing " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844]" for now
+                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
             }
         }
         return true;
     }
 
-    static void configureRoutes(String ipv6Prefix) throws InterruptedException {
-        Log.i("usbtether", "Setting Addresses and routes...");
-        set_ip_addresses(ipv6Prefix);
-        add_marked_routes(ipv6Prefix);
+    static boolean configureRoutes(String ipv6Prefix) {
+        if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
+            Log.w("usbtether", "No tether interface...");
+        } else {
+            if (set_ip_addresses(ipv6Prefix)) {
+                add_marked_routes(ipv6Prefix);
+                return true;
+            }
+        }
+        return false;
     }
 
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
