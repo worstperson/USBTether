@@ -37,7 +37,8 @@ public class ForegroundService extends Service {
     WakeLock wakeLock;
 
     static public Boolean isStarted = false;
-    public Boolean tetherActive = false;
+    private Boolean tetherActive = false;
+    private boolean natApplied = false;
 
     private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
@@ -140,33 +141,31 @@ public class ForegroundService extends Service {
                             i.putExtra("tunnel", wireguardProfile);
                             sendBroadcast(i);
                         }
-                        boolean returnCode = false;
                         unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
+                        Script.configureRNDIS();
+                        tetherActive = true;
+                        IntentFilter intentFilter = new IntentFilter("android.hardware.usb.action.USB_STATE");
+                        registerReceiver(USBReceiver, intentFilter);
+                    } else {
                         tetherInterface = pickInterface(tetherInterface);
                         if (tetherInterface != null && !tetherInterface.equals("") && !tetherInterface.equals("Auto") && waitInterface(tetherInterface)) {
                             String ipv6Addr = setupSNAT(tetherInterface, ipv6SNAT);
-                            SharedPreferences.Editor edit = sharedPref.edit();
-                            edit.putString("lastNetwork", tetherInterface);
-                            edit.putString("lastIPv6", ipv6Addr);
-                            edit.apply();
-                            try {
-                                returnCode = Script.configureInterface(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
+                            if (!natApplied) {
+                                SharedPreferences.Editor edit = sharedPref.edit();
+                                edit.putString("lastNetwork", tetherInterface);
+                                edit.putString("lastIPv6", ipv6Addr);
+                                edit.apply();
+                                natApplied = Script.configureNAT(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
                             }
-                        }
-                        IntentFilter intentFilter = new IntentFilter("android.hardware.usb.action.USB_STATE");
-                        registerReceiver(USBReceiver, intentFilter);
-                        tetherActive = returnCode;
-                    } else {
-                        Log.i("usbtether", "Restoring IP addresses and routes...");
-                        // Google One VPN is trash and reconnects all the time, just restore it for now
-                        if (!Script.restoreInterface(ipv6Prefix)) {
-                            Log.i("usbtether", "Resetting USB...");;
-                            if (!lastNetwork.equals("")) {
-                                Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                            if (natApplied) {
+                                natApplied = true;
+                                // Google One VPN is trash and reconnects all the time, just restore it for now
+                                try {
+                                    Script.configureRoutes(ipv6Prefix);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
                             }
-                            tetherActive = false;
                         }
                     }
                 } else {
@@ -178,6 +177,7 @@ public class ForegroundService extends Service {
                 if (!lastNetwork.equals("")) {
                     Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                 }
+                natApplied = false;
                 tetherActive = false;
 
                 boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
@@ -255,6 +255,7 @@ public class ForegroundService extends Service {
         if (!lastNetwork.equals("")) {
             Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
         }
+        natApplied = false;
         tetherActive = false;
         isStarted = false;
 
