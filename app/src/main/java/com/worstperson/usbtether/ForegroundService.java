@@ -39,20 +39,7 @@ public class ForegroundService extends Service {
     static public Boolean isStarted = false;
     public Boolean tetherActive = false;
 
-    private boolean runScript() {
-        boolean returnCode = false;
-        unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
-
-        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        String tetherInterface = sharedPref.getString("tetherInterface", "");
-        Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-        Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
-        Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-        Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
-        boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
-
-        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
-
+    private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
             ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
             if (connectivityManager != null) {
@@ -79,73 +66,69 @@ public class ForegroundService extends Service {
                 }
             }
         }
+        return tetherInterface;
+    }
 
-        if (tetherInterface != null && !tetherInterface.equals("") && !tetherInterface.equals("Auto")) {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putString("lastNetwork", tetherInterface);
-            edit.apply();
+    private String setupSNAT (String tetherInterface, Boolean ipv6SNAT, boolean startWireGuard, SharedPreferences sharedPref) {
+        SharedPreferences.Editor edit = sharedPref.edit();
+        edit.putString("lastNetwork", tetherInterface);
+        edit.apply();
 
-            String ipv6Addr = "";
-            try {
-                if (ipv6SNAT) {
-                    if (startWireGuard) { // TODO - tetherInterface == tun0/wireguardProfile
-                        //We need to wait for the interface to become configured
-                        int count = 1;
-                        while (count < 30) { // this is too long, but sometimes required
-                            NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
-                            if (netint != null) {
-                                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                                    if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
-                                        ipv6Addr = inetAddress.getHostAddress();
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!ipv6Addr.equals("")) {
-                                break;
-                            }
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                            count = count + 1;
-                        }
-                    } else {
-                        NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
-                        if (netint != null) {
-                            for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                                if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
-                                    ipv6Addr = inetAddress.getHostAddress();
-                                    break;
-                                }
-                            }
+        String ipv6Addr = "";
+        try {
+            if (ipv6SNAT) {
+                NetworkInterface netint = NetworkInterface.getByName(tetherInterface);
+                if (netint != null) {
+                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                        if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
+                            ipv6Addr = inetAddress.getHostAddress();
+                            break;
                         }
                     }
                 }
-                edit.putString("lastIPv6", ipv6Addr);
-                edit.apply();
+            }
+            edit.putString("lastIPv6", ipv6Addr);
+            edit.apply();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        return ipv6Addr;
+    }
+
+    private boolean waitInterface(String tetherInterface) {
+        //We need to wait for the interface to become configured
+        int count = 1;
+        while (count < 30) { // this is too long, but sometimes required
+            try {
+                if (NetworkInterface.getByName(tetherInterface) != null) {
+                    return true;
+                }
             } catch (SocketException e) {
                 e.printStackTrace();
             }
-
             try {
-                returnCode = Script.configureInterface(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            count = count + 1;
         }
-
-        IntentFilter filter = new IntentFilter();
-        filter.addAction("android.hardware.usb.action.USB_STATE");
-        registerReceiver(USBReceiver, filter);
-
-        return returnCode;
+        return false;
     }
 
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            String tetherInterface = sharedPref.getString("tetherInterface", "");
+            String lastNetwork = sharedPref.getString("lastNetwork", "");
+            String lastIPv6 = sharedPref.getString("lastIPv6", "");
+            Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+            Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+            Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+            Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
+            String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+
             // Some devices go into Discharging state rather then Not Charging
             // when charge control apps are used, so we can't use BatteryManager
             // This actually works way better anyway, even though it's undocumented
@@ -154,7 +137,6 @@ public class ForegroundService extends Service {
                 if (intent.getExtras().getBoolean("configured")) {
                     if (!tetherActive) {
                         Log.i("usbtether", "Configuring interface...");
-                        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                         boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
                         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                         if (startWireGuard) {
@@ -162,30 +144,37 @@ public class ForegroundService extends Service {
                             i.setPackage("com.wireguard.android");
                             i.putExtra("tunnel", wireguardProfile);
                             sendBroadcast(i);
-                            //TODO - Wait for interface to come up, otherwise AUTO is not likely to work (tun0 or wireguardProfile)
                         }
-                        tetherActive = runScript();
+                        boolean returnCode = false;
+                        unregisterReceiver(USBReceiver); //Required for < android.os.Build.VERSION_CODES.P
+                        tetherInterface = pickInterface(tetherInterface);
+                        if (tetherInterface != null && !tetherInterface.equals("") && !tetherInterface.equals("Auto") && waitInterface(tetherInterface)) {
+                            String ipv6Addr = setupSNAT (tetherInterface, ipv6SNAT, startWireGuard, sharedPref);
+                            try {
+                                returnCode = Script.configureInterface(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        IntentFilter intentFilter = new IntentFilter("android.hardware.usb.action.USB_STATE");
+                        registerReceiver(USBReceiver, intentFilter);
+                        tetherActive = returnCode;
                     } else {
                         Log.i("usbtether", "Restoring IP addresses and routes...");
                         // Google One VPN is trash and reconnects all the time, just restore it for now
-                        // This gets called right after setting up a connection, FIXME
-                        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-                        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
-                        Script.restoreInterface(ipv6Prefix);
+                        if (!Script.restoreInterface(ipv6Prefix)) {
+                            Log.i("usbtether", "Resetting USB...");;
+                            if (!lastNetwork.equals("")) {
+                                Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                            }
+                            tetherActive = false;
+                        }
                     }
                 } else {
                     Log.i("usbtether", "Interface not yet ready");
                 }
             } else {
                 Log.i("usbtether", "USB Disconnected");
-                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-                String lastNetwork = sharedPref.getString("lastNetwork", "");
-                String lastIPv6 = sharedPref.getString("lastIPv6", "");
-                Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-                Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
-                Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-                Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
-                String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
                 if (!lastNetwork.equals("")) {
                     Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);

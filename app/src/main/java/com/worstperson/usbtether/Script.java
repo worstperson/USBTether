@@ -110,19 +110,19 @@ public class Script {
         return true;
     }
 
-    static void restoreInterface(String ipv6Prefix) {
+    static boolean restoreInterface(String ipv6Prefix) {
         if ( !Shell.su("ip link set dev rndis0 down").exec().isSuccess()  || !Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
-            Log.w("usbtether", "Aborting tether...");
-            Shell.su("setprop sys.usb.config \"adb\"").exec();
-            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
+            Log.w("usbtether", "No tether interface...");
         } else {
             try {
                 set_ip_addresses(ipv6Prefix);
                 add_marked_routes(ipv6Prefix);
+                return true;
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
+        return false;
     }
 
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
