@@ -162,7 +162,7 @@ public class ForegroundService extends Service {
                         if (natApplied) {
                             boolean result = false;
                             // Google One VPN is trash and reconnects all the time, just restore it for now
-                            result = Script.configureRoutes(ipv6Prefix);
+                            result = Script.configureRoutes(tetherInterface, ipv6Prefix);
                             if (!result) {
                                 Log.w("usbtether", "Resetting interface...");
                                 if (!lastNetwork.equals("")) {
@@ -201,29 +201,26 @@ public class ForegroundService extends Service {
     private final BroadcastReceiver CONReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // this is ugly code, fixme
-            NetworkInterface currentInterface = null;
-            try {
-                currentInterface = NetworkInterface.getByName("tun0");
-            } catch (SocketException e) {
-                e.printStackTrace();
-            }
-            if (currentInterface == null) {
-                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-                String tetherInterface = sharedPref.getString("tetherInterface", "");
-                if (tetherActive && natApplied && tetherInterface.equals("tun0")) {
-                    String lastNetwork = sharedPref.getString("lastNetwork", "");
-                    String lastIPv6 = sharedPref.getString("lastIPv6", "");
-                    Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-                    Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
-                    Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-                    Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
-                    String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            String tetherInterface = sharedPref.getString("tetherInterface", "");
+            String lastNetwork = sharedPref.getString("lastNetwork", "");
+            String lastIPv6 = sharedPref.getString("lastIPv6", "");
+            Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+            Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+            Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+            Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
+            String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
+            if (tetherActive && natApplied && tetherInterface.equals("tun0")) {
+                NetworkInterface currentInterface = null;
+                try {
+                    currentInterface = NetworkInterface.getByName("tun0");
+                } catch (SocketException e) {
+                    e.printStackTrace();
+                }
+                if (currentInterface == null) {
                     Script.startGoogleOneVPN();
-
                     waitInterface("tun0");
-
                     // Update the SNAT address if necessary
                     String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
                     if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
@@ -233,10 +230,7 @@ public class ForegroundService extends Service {
                         edit.putString("lastIPv6", newAddr);
                         edit.apply();
                     }
-                    // This command is required to bring the network back up
-                    // Check if it can be safely placed in configureRoutes
-                    Script.forwardInterface(tetherInterface);
-                    boolean result = Script.configureRoutes(ipv6Prefix);
+                    boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
                     if (!result) {
                         Log.w("usbtether", "Resetting interface...");
                         if (!lastNetwork.equals("")) {

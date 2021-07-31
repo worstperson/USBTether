@@ -19,6 +19,10 @@ public class Script {
         }
     }
 
+    static void forwardInterface(String tetherInterface) {
+        shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
+    }
+
     static private boolean set_ip_addresses(String ipv6Prefix) {
         Log.i("USBTether", "Setting IP addresses");
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
@@ -64,7 +68,6 @@ public class Script {
     static private void set_up_nat(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
         Log.i("USBTether", "Setting up NAT");
         shellCommand("ndc nat enable rndis0 " + tetherInterface + " 99");
-        shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
         if (ipv6Masquerading || ipv6SNAT) {
             String prefix = "natctrl";
             String counter = prefix+"_tether";
@@ -122,20 +125,17 @@ public class Script {
         return true;
     }
 
-    static boolean configureRoutes(String ipv6Prefix) {
+    static boolean configureRoutes(String tetherInterface, String ipv6Prefix) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
         } else {
+            forwardInterface(tetherInterface);
             if (set_ip_addresses(ipv6Prefix)) {
                 add_marked_routes(ipv6Prefix);
                 return true;
             }
         }
         return false;
-    }
-
-    static void forwardInterface(String tetherInterface) {
-        shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
     }
 
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
