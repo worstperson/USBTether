@@ -134,6 +134,10 @@ public class Script {
         return false;
     }
 
+    static void forwardInterface(String tetherInterface) {
+        shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
+    }
+
     static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
@@ -177,7 +181,7 @@ public class Script {
         }
     }
 
-    /*static void refreshSNAT(String tetherInterface, String ipv6Addr, String newAddr) {
+    static void refreshSNAT(String tetherInterface, String ipv6Addr, String newAddr) {
         Log.w("USBTether", "Refreshing SNAT IPTables Rule");
         String prefix = "natctrl";
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -185,7 +189,7 @@ public class Script {
         }
         shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
         shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
-    }*/
+    }
 
     static void startGoogleOneVPN() {
         Log.w("USBTether", "Starting Google One VPN");
