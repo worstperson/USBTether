@@ -195,6 +195,35 @@ public class ForegroundService extends Service {
         }
     };
 
+    // Try to detect VPN disconnects and restart it if possible
+    private final BroadcastReceiver CONReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (tetherActive && natApplied) {
+                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                String lastNetwork = sharedPref.getString("lastNetwork", "");
+                String lastIPv6 = sharedPref.getString("lastIPv6", "");
+                Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
+                Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+                Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+                Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
+                String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+
+                Script.startGoogleOneVPN();
+
+                // This requires a interface reset for some reason... why?
+                Log.w("usbtether", "Resetting interface...");
+                if (!lastNetwork.equals("")) {
+                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                }
+                // USB event wasn't triggered? What?
+                Script.configureRNDIS();
+                natApplied = false;
+                tetherActive = true;
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -231,8 +260,12 @@ public class ForegroundService extends Service {
 
         startForeground(1, notification);
 
-        IntentFilter intentFilter = new IntentFilter("android.hardware.usb.action.USB_STATE");
-        registerReceiver(USBReceiver, intentFilter);
+        registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
+        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+        int vpnWatchdog = sharedPref.getInt("vpnWatchdog", 0);
+        if (vpnWatchdog > 0) {
+            registerReceiver(CONReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+        }
 
         return Service.START_STICKY;
     }

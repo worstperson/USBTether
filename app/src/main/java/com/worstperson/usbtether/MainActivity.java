@@ -111,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
+        Spinner vpnwatchdog_spinner = findViewById(R.id.vpnwatchdog_spinner);
         EditText wg_text = findViewById(R.id.wg_text);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -132,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
+        int vpnWatchdog = sharedPref.getInt("vpnWatchdog", 0);
         boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -190,6 +192,14 @@ public class MainActivity extends AppCompatActivity {
         prefix_spinner.setAdapter(adapter3);
         prefix_spinner.setSelection(ipv6Default ? 1 : 0);
 
+        ArrayList<String> arraySpinner4 = new ArrayList<>();
+        arraySpinner4.add("disabled");
+        arraySpinner4.add("Google One VPN");
+        ArrayAdapter<String> adapter4 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner4);
+        adapter4.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        vpnwatchdog_spinner.setAdapter(adapter4);
+        vpnwatchdog_spinner.setSelection(vpnWatchdog);
+
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
@@ -198,6 +208,7 @@ public class MainActivity extends AppCompatActivity {
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
+            vpnwatchdog_spinner.setEnabled(false);
         }
 
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -208,6 +219,7 @@ public class MainActivity extends AppCompatActivity {
             interface_spinner.setEnabled(!isChecked);
             nat_spinner.setEnabled(!isChecked);
             prefix_spinner.setEnabled(!isChecked);
+            vpnwatchdog_spinner.setEnabled(!isChecked);
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("serviceEnabled", isChecked);
             edit.apply();
@@ -281,6 +293,18 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("ipv6Default", position == 1);
+                edit.apply();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+
+        vpnwatchdog_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putInt("vpnWatchdog", position);
                 edit.apply();
             }
             @Override

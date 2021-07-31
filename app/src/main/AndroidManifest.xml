@@ -32,6 +32,7 @@
             android:exported="false">
             <intent-filter >
                 <action android:name="android.hardware.usb.action.USB_STATE" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
             </intent-filter>
         </service>
         <receiver

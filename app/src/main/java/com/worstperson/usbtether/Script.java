@@ -176,4 +176,22 @@ public class Script {
             Log.w("USBTether", "Tether interface not configured");
         }
     }
+
+    /*static void refreshSNAT(String tetherInterface, String ipv6Addr, String newAddr) {
+        Log.w("USBTether", "Refreshing SNAT IPTables Rule");
+        String prefix = "natctrl";
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            prefix = "tetherctrl";
+        }
+        shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
+        shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
+    }*/
+
+    static void startGoogleOneVPN() {
+        Log.w("USBTether", "Starting Google One VPN");
+        // Launch main activity
+        shellCommand("am start com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
+        // Start the service
+        shellCommand("am startservice com.google.android.apps.subscriptions.red/com.google.android.libraries.privacy.ppn.PpnVpnService");
+    }
 }
