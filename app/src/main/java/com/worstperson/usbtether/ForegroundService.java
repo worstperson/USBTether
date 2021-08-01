@@ -218,6 +218,7 @@ public class ForegroundService extends Service {
     private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            Log.i("usbtether", "Recieved CONNECTIVITY_CHANGE broadcast");
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -230,7 +231,7 @@ public class ForegroundService extends Service {
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             NetworkInterface currentInterface = null;
 
-            if (tetherActive) {
+            if (tetherActive && natApplied) {
                 if (autostartVPN == 1 || autostartVPN == 2) {
                     String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                     Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
@@ -346,8 +347,6 @@ public class ForegroundService extends Service {
         startForeground(1, notification);
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
-        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 
         return Service.START_STICKY;
