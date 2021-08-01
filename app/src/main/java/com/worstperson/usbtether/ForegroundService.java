@@ -116,7 +116,7 @@ public class ForegroundService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            String tetherInterface = sharedPref.getString("tetherInterface", "");
+            String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
             String lastIPv6 = sharedPref.getString("lastIPv6", "");
             Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
@@ -152,8 +152,17 @@ public class ForegroundService extends Service {
                             Script.startCloudflare1111Warp();
                             waitInterface("tun0");
                         }
-                        Script.configureRNDIS();
-                        tetherActive = true;
+                        tetherInterface = pickInterface(tetherInterface);
+                        NetworkInterface currentInterface = null;
+                        try {
+                            currentInterface = NetworkInterface.getByName(tetherInterface);
+                        } catch (SocketException e) {
+                            e.printStackTrace();
+                        }
+                        if (currentInterface != null) {
+                            Script.configureRNDIS();
+                            tetherActive = true;
+                        }
                     } else {
                         if (!natApplied) {
                             tetherInterface = pickInterface(tetherInterface);
@@ -174,9 +183,7 @@ public class ForegroundService extends Service {
                             result = Script.configureRoutes(tetherInterface, ipv6Prefix);
                             if (!result) {
                                 Log.w("usbtether", "Resetting interface...");
-                                if (!lastNetwork.equals("")) {
-                                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                                }
+                                Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                                 natApplied = false;
                                 tetherActive = false;
                             }
@@ -187,10 +194,7 @@ public class ForegroundService extends Service {
                 }
             } else {
                 Log.i("usbtether", "USB Disconnected");
-
-                if (!lastNetwork.equals("")) {
-                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                }
+                Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                 natApplied = false;
                 tetherActive = false;
 
@@ -215,7 +219,7 @@ public class ForegroundService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            String tetherInterface = sharedPref.getString("tetherInterface", "");
+            String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
             String lastIPv6 = sharedPref.getString("lastIPv6", "");
             Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
@@ -224,9 +228,9 @@ public class ForegroundService extends Service {
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            NetworkInterface currentInterface = null;
 
-            if (tetherActive && natApplied) {
-                NetworkInterface currentInterface = null;
+            if (tetherActive) {
                 if (autostartVPN == 1 || autostartVPN == 2) {
                     String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                     Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
@@ -269,10 +273,10 @@ public class ForegroundService extends Service {
                             edit.putString("lastNetwork", tetherInterface);
                             edit.putString("lastIPv6", newAddr);
                             edit.apply();
+                            lastIPv6 = newAddr;
                         }
                         boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
                         if (!result) {
-                            // Might not want to reset here, just wait until the interface comes back?
                             Log.w("usbtether", "Resetting interface...");
                             Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                             Script.configureRNDIS();
@@ -285,6 +289,18 @@ public class ForegroundService extends Service {
                 } else {
                     Log.w("usbtether", "Resetting interface...");
                     Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                    Script.configureRNDIS();
+                    natApplied = false;
+                    tetherActive = true;
+                }
+            } else if (autostartVPN == 0) {
+                tetherInterface = pickInterface(tetherInterface);
+                try {
+                    currentInterface = NetworkInterface.getByName(tetherInterface);
+                } catch (SocketException e) {
+                    e.printStackTrace();
+                }
+                if (currentInterface != null) {
                     Script.configureRNDIS();
                     natApplied = false;
                     tetherActive = true;
