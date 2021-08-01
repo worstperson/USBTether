@@ -203,13 +203,13 @@ public class Script {
     }
 
     static void startCloudflare1111Warp() {
-        Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
+        Log.w("USBTether", "Stopping Cloudflare 1.1.1.1 Warp");
         shellCommand("am start -W com.cloudflare.onedotonedotonedotone/com.cloudflare.app.presentation.main.MainActivity");
         shellCommand("am startservice com.cloudflare.onedotonedotonedotone/com.cloudflare.app.vpnservice.CloudflareVpnService");
     }
 
     static void stopCloudflare1111Warp() {
-        Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
+        Log.w("USBTether", "Stopping Cloudflare 1.1.1.1 Warp");
         shellCommand("am force-stop com.cloudflare.onedotonedotonedotone");
     }
 }
