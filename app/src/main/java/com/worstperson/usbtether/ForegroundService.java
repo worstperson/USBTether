@@ -211,7 +211,7 @@ public class ForegroundService extends Service {
     };
 
     // Try to detect VPN disconnects and restart it if possible
-    private final BroadcastReceiver VPNReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
@@ -225,39 +225,69 @@ public class ForegroundService extends Service {
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
 
-            if (tetherActive && natApplied && tetherInterface.equals("tun0")) {
+            if (tetherActive && natApplied) {
                 NetworkInterface currentInterface = null;
-                try {
-                    currentInterface = NetworkInterface.getByName("tun0");
-                } catch (SocketException e) {
-                    e.printStackTrace();
-                }
-                if (currentInterface == null) {
-                    if (autostartVPN == 3) {
-                        Script.startGoogleOneVPN();
-                    } else if (autostartVPN == 4) {
-                        Script.startCloudflare1111Warp();
+                if (autostartVPN == 1 || autostartVPN == 2) {
+                    String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+                    Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+                    i.setPackage("com.wireguard.android");
+                    i.putExtra("tunnel", wireguardProfile);
+                    sendBroadcast(i);
+                    if (autostartVPN == 1) {
+                        waitInterface("tun0");
+                    } else {
+                        // This might not get triggered, idk
+                        waitInterface(wireguardProfile);
                     }
-                    waitInterface("tun0");
-                    // Update the SNAT address if necessary
-                    String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
-                    if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
-                        Script.refreshSNAT(tetherInterface, lastIPv6, newAddr);
-                        SharedPreferences.Editor edit = sharedPref.edit();
-                        edit.putString("lastNetwork", tetherInterface);
-                        edit.putString("lastIPv6", newAddr);
-                        edit.apply();
+                } else if (autostartVPN > 2) {
+                    try {
+                        currentInterface = NetworkInterface.getByName("tun0");
+                    } catch (SocketException e) {
+                        e.printStackTrace();
                     }
-                    boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
-                    if (!result) {
-                        Log.w("usbtether", "Resetting interface...");
-                        if (!lastNetwork.equals("")) {
-                            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                    if (currentInterface == null) {
+                        if (autostartVPN == 3) {
+                            Script.startGoogleOneVPN();
+                        } else if (autostartVPN == 4) {
+                            Script.startCloudflare1111Warp();
                         }
-                        natApplied = false;
-                        tetherActive = false;
-                        // USB event most likely will not be called here, investigate
+                        waitInterface("tun0");
                     }
+                }
+                if (!tetherInterface.equals("Auto")) {
+                    try {
+                        currentInterface = NetworkInterface.getByName(tetherInterface);
+                    } catch (SocketException e) {
+                        e.printStackTrace();
+                    }
+                    if (currentInterface != null) {
+                        // Update the SNAT address if necessary
+                        String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
+                        if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
+                            Script.refreshSNAT(tetherInterface, lastIPv6, newAddr);
+                            SharedPreferences.Editor edit = sharedPref.edit();
+                            edit.putString("lastNetwork", tetherInterface);
+                            edit.putString("lastIPv6", newAddr);
+                            edit.apply();
+                        }
+                        boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
+                        if (!result) {
+                            // Might not want to reset here, just wait until the interface comes back?
+                            Log.w("usbtether", "Resetting interface...");
+                            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                            Script.configureRNDIS();
+                            natApplied = false;
+                            tetherActive = true;
+                        }
+                    } else {
+                        // Do nothing until our interface returns
+                    }
+                } else {
+                    Log.w("usbtether", "Resetting interface...");
+                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                    Script.configureRNDIS();
+                    natApplied = false;
+                    tetherActive = true;
                 }
             }
         }
@@ -302,9 +332,7 @@ public class ForegroundService extends Service {
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
-        if (autostartVPN > 2) {
-            registerReceiver(VPNReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
-        }
+        registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 
         return Service.START_STICKY;
     }
@@ -316,7 +344,7 @@ public class ForegroundService extends Service {
             wakeLock.release();
         }
         unregisterReceiver(USBReceiver);
-        unregisterReceiver(VPNReceiver);
+        unregisterReceiver(ConnectionReceiver);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
