@@ -254,7 +254,7 @@ public class ForegroundService extends Service {
                                 // This might not get triggered, idk
                                 waitInterface(wireguardProfile);
                             }
-                        } else if (autostartVPN > 2) {
+                        } else {
                             try {
                                 currentInterface = NetworkInterface.getByName("tun0");
                             } catch (SocketException e) {

@@ -16,11 +16,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Editable;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -42,7 +45,33 @@ public class MainActivity extends AppCompatActivity {
 
     PowerManager powerManager;
 
-    @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife"})
+    void setInterfaceSpinner(String tetherInterface, Spinner interface_spinner) {
+        ArrayList<String> arraySpinner = new ArrayList<>();
+        arraySpinner.add(tetherInterface);
+        if (!tetherInterface.equals("Auto")) {
+            arraySpinner.add("Auto");
+        }
+        Enumeration<NetworkInterface> nets;
+        try {
+            nets = NetworkInterface.getNetworkInterfaces();
+            for (NetworkInterface netint : Collections.list(nets)){
+                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
+                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
+                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
+                            arraySpinner.add(netint.getName());
+                        }
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        interface_spinner.setAdapter(adapter);
+    }
+
+    @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife", "WrongConstant"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -112,6 +141,7 @@ public class MainActivity extends AppCompatActivity {
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
         EditText wg_text = findViewById(R.id.wg_text);
+        LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
@@ -142,29 +172,7 @@ public class MainActivity extends AppCompatActivity {
 
         wg_text.setText(wireguardProfile);
 
-        ArrayList<String> arraySpinner = new ArrayList<>();
-        arraySpinner.add(tetherInterface);
-        if (!tetherInterface.equals("Auto")) {
-            arraySpinner.add("Auto");
-        }
-        Enumeration<NetworkInterface> nets;
-        try {
-            nets = NetworkInterface.getNetworkInterfaces();
-            for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
-                            arraySpinner.add(netint.getName());
-                        }
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        interface_spinner.setAdapter(adapter);
+        setInterfaceSpinner(tetherInterface, interface_spinner);
 
         ArrayList<String> arraySpinner2 = new ArrayList<>();
         arraySpinner2.add("None");
@@ -208,6 +216,10 @@ public class MainActivity extends AppCompatActivity {
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
             vpn_spinner.setEnabled(false);
+        }
+
+        if (autostartVPN != 1 && autostartVPN != 2) {
+            wgp_layout.setVisibility(View.GONE);
         }
 
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -294,9 +306,32 @@ public class MainActivity extends AppCompatActivity {
 
         vpn_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) { ;
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                String tetherInterface = "";
+                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putInt("autostartVPN", position);
+                switch (position) {
+                    case 0:
+                        wgp_layout.setVisibility(View.GONE);
+                        break;
+                    case 1: case 2:
+                        wgp_layout.setVisibility(View.VISIBLE);
+                        if (position == 1) {
+                            tetherInterface = "tun0";
+                        } else {
+                            tetherInterface = wireguardProfile;
+                        }
+                        break;
+                    default:
+                        wgp_layout.setVisibility(View.GONE);
+                        tetherInterface = "tun0";
+                }
+                if (position > 0) {
+                    setInterfaceSpinner(tetherInterface, interface_spinner);
+                    edit.putString("tetherInterface", tetherInterface);
+                }
                 edit.apply();
             }
             @Override
@@ -304,14 +339,25 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        wg_text.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
-                edit.apply();
-                return true;
+        wg_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    SharedPreferences.Editor edit = sharedPref.edit();
+                    edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
+                    if (autostartVPN == 2) {
+                        String tetherInterface = String.valueOf(wg_text.getText());
+                        MainActivity.this.setInterfaceSpinner(tetherInterface, interface_spinner);
+                        edit.putString("tetherInterface", tetherInterface);
+                    }
+                    edit.apply();
+                    return true;
+                }
+
+                return false;
             }
-            return false;
         });
 
         if (serviceEnabled && !ForegroundService.isStarted) {
@@ -346,28 +392,6 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
 
-        ArrayList<String> arraySpinner = new ArrayList<>();
-        arraySpinner.add(tetherInterface);
-        if (!tetherInterface.equals("Auto")) {
-            arraySpinner.add("Auto");
-        }
-        Enumeration<NetworkInterface> nets;
-        try {
-            nets = NetworkInterface.getNetworkInterfaces();
-            for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
-                            arraySpinner.add(netint.getName());
-                        }
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        interface_spinner.setAdapter(adapter);
+        setInterfaceSpinner(tetherInterface, interface_spinner);
     }
 }
