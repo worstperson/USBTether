@@ -39,6 +39,7 @@ public class ForegroundService extends Service {
     static public Boolean isStarted = false;
     private Boolean tetherActive = false;
     private boolean natApplied = false;
+    private boolean blockReciever = false;
 
     private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
@@ -135,23 +136,26 @@ public class ForegroundService extends Service {
                     if (!tetherActive) {
                         Log.i("usbtether", "Configuring interface...");
                         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
-                        if (autostartVPN == 1 || autostartVPN == 2) {
-                            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
-                            i.setPackage("com.wireguard.android");
-                            i.putExtra("tunnel", wireguardProfile);
-                            sendBroadcast(i);
-                            if (autostartVPN == 1) {
+                        if (autostartVPN > 0) {
+                            blockReciever = true;
+                            if (autostartVPN == 1 || autostartVPN == 2) {
+                                String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+                                Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+                                i.setPackage("com.wireguard.android");
+                                i.putExtra("tunnel", wireguardProfile);
+                                sendBroadcast(i);
+                                if (autostartVPN == 1) {
+                                    waitInterface("tun0");
+                                } else {
+                                    waitInterface(wireguardProfile);
+                                }
+                            } else if (autostartVPN == 3) {
+                                Script.startGoogleOneVPN();
                                 waitInterface("tun0");
-                            } else {
-                                waitInterface(wireguardProfile);
+                            } else if (autostartVPN == 4) {
+                                Script.startCloudflare1111Warp();
+                                waitInterface("tun0");
                             }
-                        } else if (autostartVPN == 3) {
-                            Script.startGoogleOneVPN();
-                            waitInterface("tun0");
-                        } else if (autostartVPN == 4) {
-                            Script.startCloudflare1111Warp();
-                            waitInterface("tun0");
                         }
                         tetherInterface = pickInterface(tetherInterface);
                         NetworkInterface currentInterface = null;
@@ -188,6 +192,7 @@ public class ForegroundService extends Service {
                                 natApplied = false;
                                 tetherActive = false;
                             }
+                            blockReciever = false;
                         }
                     }
                 } else {
@@ -233,81 +238,89 @@ public class ForegroundService extends Service {
             NetworkInterface currentInterface = null;
 
             // Checking for natApplied avoids triggering on VPN autostart
-            if (tetherActive && natApplied) {
-                if (autostartVPN == 1 || autostartVPN == 2) {
-                    String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                    Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
-                    i.setPackage("com.wireguard.android");
-                    i.putExtra("tunnel", wireguardProfile);
-                    sendBroadcast(i);
-                    if (autostartVPN == 1) {
-                        waitInterface("tun0");
-                    } else {
-                        // This might not get triggered, idk
-                        waitInterface(wireguardProfile);
-                    }
-                } else if (autostartVPN > 2) {
-                    try {
-                        currentInterface = NetworkInterface.getByName("tun0");
-                    } catch (SocketException e) {
-                        e.printStackTrace();
-                    }
-                    if (currentInterface == null) {
-                        if (autostartVPN == 3) {
-                            Script.startGoogleOneVPN();
-                        } else if (autostartVPN == 4) {
-                            Script.startCloudflare1111Warp();
+            if (!blockReciever) {
+                if (tetherActive && natApplied) {
+                    if (autostartVPN > 0) {
+                        blockReciever = true;
+                        if (autostartVPN == 1 || autostartVPN == 2) {
+                            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+                            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+                            i.setPackage("com.wireguard.android");
+                            i.putExtra("tunnel", wireguardProfile);
+                            sendBroadcast(i);
+                            if (autostartVPN == 1) {
+                                waitInterface("tun0");
+                            } else {
+                                // This might not get triggered, idk
+                                waitInterface(wireguardProfile);
+                            }
+                        } else if (autostartVPN > 2) {
+                            try {
+                                currentInterface = NetworkInterface.getByName("tun0");
+                            } catch (SocketException e) {
+                                e.printStackTrace();
+                            }
+                            if (currentInterface == null) {
+                                if (autostartVPN == 3) {
+                                    Script.startGoogleOneVPN();
+                                } else if (autostartVPN == 4) {
+                                    Script.startCloudflare1111Warp();
+                                }
+                                waitInterface("tun0");
+                            }
                         }
-                        waitInterface("tun0");
                     }
-                }
-                if (!tetherInterface.equals("Auto")) {
+                    if (!tetherInterface.equals("Auto")) {
+                        try {
+                            currentInterface = NetworkInterface.getByName(tetherInterface);
+                        } catch (SocketException e) {
+                            e.printStackTrace();
+                        }
+                        if (currentInterface != null) {
+                            // Update the SNAT address if necessary
+                            String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
+                            if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
+                                Script.refreshSNAT(tetherInterface, lastIPv6, newAddr);
+                                SharedPreferences.Editor edit = sharedPref.edit();
+                                edit.putString("lastNetwork", tetherInterface);
+                                edit.putString("lastIPv6", newAddr);
+                                edit.apply();
+                                lastIPv6 = newAddr;
+                            }
+                            boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
+                            if (!result) {
+                                Log.w("usbtether", "Resetting interface...");
+                                Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                                Script.configureRNDIS();
+                                natApplied = false;
+                                tetherActive = true;
+                            }
+                            blockReciever = false;
+                        } else {
+                            // Do nothing until our interface returns
+                        }
+                    } else {
+                        Log.w("usbtether", "Resetting interface...");
+                        Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                        Script.configureRNDIS();
+                        natApplied = false;
+                        tetherActive = true;
+                    }
+                } else if (!tetherActive) {
+                    tetherInterface = pickInterface(tetherInterface);
                     try {
                         currentInterface = NetworkInterface.getByName(tetherInterface);
                     } catch (SocketException e) {
                         e.printStackTrace();
                     }
                     if (currentInterface != null) {
-                        // Update the SNAT address if necessary
-                        String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
-                        if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
-                            Script.refreshSNAT(tetherInterface, lastIPv6, newAddr);
-                            SharedPreferences.Editor edit = sharedPref.edit();
-                            edit.putString("lastNetwork", tetherInterface);
-                            edit.putString("lastIPv6", newAddr);
-                            edit.apply();
-                            lastIPv6 = newAddr;
-                        }
-                        boolean result = Script.configureRoutes(tetherInterface, ipv6Prefix);
-                        if (!result) {
-                            Log.w("usbtether", "Resetting interface...");
-                            Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                            Script.configureRNDIS();
-                            natApplied = false;
-                            tetherActive = true;
-                        }
-                    } else {
-                        // Do nothing until our interface returns
+                        Script.configureRNDIS();
+                        natApplied = false;
+                        tetherActive = true;
                     }
-                } else {
-                    Log.w("usbtether", "Resetting interface...");
-                    Script.resetInterface(lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                    Script.configureRNDIS();
-                    natApplied = false;
-                    tetherActive = true;
                 }
-            } else if (!tetherActive && autostartVPN == 0) {
-                tetherInterface = pickInterface(tetherInterface);
-                try {
-                    currentInterface = NetworkInterface.getByName(tetherInterface);
-                } catch (SocketException e) {
-                    e.printStackTrace();
-                }
-                if (currentInterface != null) {
-                    Script.configureRNDIS();
-                    natApplied = false;
-                    tetherActive = true;
-                }
+            } else {
+                Log.w("usbtether", "Broadcast blocked...");
             }
         }
     };
