@@ -193,15 +193,23 @@ public class Script {
 
     static void startGoogleOneVPN() {
         Log.w("USBTether", "Starting Google One VPN");
-        shellCommand("am start com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
-        shellCommand("sleep 1");
+        shellCommand("am start -W com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
         shellCommand("am startservice com.google.android.apps.subscriptions.red/com.google.android.libraries.privacy.ppn.PpnVpnService");
+    }
+
+    static void stopGoogleOneVPN() {
+        Log.w("USBTether", "Starting Google One VPN");
+        shellCommand("am force-stop com.google.android.apps.subscriptions.red");
     }
 
     static void startCloudflare1111Warp() {
         Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
-        shellCommand("am start com.cloudflare.onedotonedotonedotone/com.cloudflare.app.presentation.main.MainActivity");
-        shellCommand("sleep 1");
+        shellCommand("am start -W com.cloudflare.onedotonedotonedotone/com.cloudflare.app.presentation.main.MainActivity");
         shellCommand("am startservice com.cloudflare.onedotonedotonedotone/com.cloudflare.app.vpnservice.CloudflareVpnService");
+    }
+
+    static void stopCloudflare1111Warp() {
+        Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
+        shellCommand("am force-stop com.cloudflare.onedotonedotonedotone");
     }
 }

@@ -201,8 +201,11 @@ public class ForegroundService extends Service {
                     i.setPackage("com.wireguard.android");
                     i.putExtra("tunnel", wireguardProfile);
                     sendBroadcast(i);
+                } else if (autostartVPN == 3) {
+                    Script.stopGoogleOneVPN();
+                } else if (autostartVPN == 4) {
+                    Script.stopCloudflare1111Warp();
                 }
-                // Add support for stopping VPNs
             }
         }
     };
