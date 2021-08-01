@@ -115,6 +115,7 @@ public class ForegroundService extends Service {
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            Log.i("usbtether", "Recieved USB_STATE broadcast");
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -231,6 +232,7 @@ public class ForegroundService extends Service {
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             NetworkInterface currentInterface = null;
 
+            // Checking for natApplied avoids triggering on VPN autostart
             if (tetherActive && natApplied) {
                 if (autostartVPN == 1 || autostartVPN == 2) {
                     String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -294,7 +296,7 @@ public class ForegroundService extends Service {
                     natApplied = false;
                     tetherActive = true;
                 }
-            } else if (autostartVPN == 0) {
+            } else if (!tetherActive && autostartVPN == 0) {
                 tetherInterface = pickInterface(tetherInterface);
                 try {
                     currentInterface = NetworkInterface.getByName(tetherInterface);
