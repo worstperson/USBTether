@@ -107,11 +107,10 @@ public class MainActivity extends AppCompatActivity {
         Switch service_switch = findViewById(R.id.service_switch);
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
         Switch ttl_switch = findViewById(R.id.ttl_switch);
-        Switch wg_switch = findViewById(R.id.wg_switch);
+        Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
-        Spinner vpnwatchdog_spinner = findViewById(R.id.vpnwatchdog_spinner);
         EditText wg_text = findViewById(R.id.wg_text);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -133,15 +132,13 @@ public class MainActivity extends AppCompatActivity {
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
-        int vpnWatchdog = sharedPref.getInt("vpnWatchdog", 0);
-        boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
+        int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
 
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
         ttl_switch.setChecked(fixTTL);
-        wg_switch.setChecked(startWireGuard);
 
         wg_text.setText(wireguardProfile);
 
@@ -194,32 +191,33 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<String> arraySpinner4 = new ArrayList<>();
         arraySpinner4.add("disabled");
+        arraySpinner4.add("WireGuard");
+        arraySpinner4.add("WireGuard Kernel Mode");
         arraySpinner4.add("Google One VPN");
+        arraySpinner4.add("Cloudflare 1.1.1.1 Warp");
         ArrayAdapter<String> adapter4 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner4);
         adapter4.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        vpnwatchdog_spinner.setAdapter(adapter4);
-        vpnwatchdog_spinner.setSelection(vpnWatchdog);
+        vpn_spinner.setAdapter(adapter4);
+        vpn_spinner.setSelection(autostartVPN);
 
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
-            wg_switch.setEnabled(false);
             wg_text.setEnabled(false);
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
-            vpnwatchdog_spinner.setEnabled(false);
+            vpn_spinner.setEnabled(false);
         }
 
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             dnsmasq_switch.setEnabled(!isChecked);
             ttl_switch.setEnabled(!isChecked);
-            wg_switch.setEnabled(!isChecked);
             wg_text.setEnabled(!isChecked);
             interface_spinner.setEnabled(!isChecked);
             nat_spinner.setEnabled(!isChecked);
             prefix_spinner.setEnabled(!isChecked);
-            vpnwatchdog_spinner.setEnabled(!isChecked);
+            vpn_spinner.setEnabled(!isChecked);
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("serviceEnabled", isChecked);
             edit.apply();
@@ -244,12 +242,6 @@ public class MainActivity extends AppCompatActivity {
         ttl_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("fixTTL", isChecked);
-            edit.apply();
-        });
-
-        wg_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("startWireGuard", isChecked);
             edit.apply();
         });
 
@@ -300,11 +292,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        vpnwatchdog_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        vpn_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) { ;
                 SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putInt("vpnWatchdog", position);
+                edit.putInt("autostartVPN", position);
                 edit.apply();
             }
             @Override

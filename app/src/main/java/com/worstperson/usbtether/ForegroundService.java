@@ -133,13 +133,24 @@ public class ForegroundService extends Service {
                 if (intent.getExtras().getBoolean("configured")) {
                     if (!tetherActive) {
                         Log.i("usbtether", "Configuring interface...");
-                        boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
-                        String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                        if (startWireGuard) {
+                        int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                        if (autostartVPN == 1 || autostartVPN == 2) {
+                            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                             Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
                             i.setPackage("com.wireguard.android");
                             i.putExtra("tunnel", wireguardProfile);
                             sendBroadcast(i);
+                            if (autostartVPN == 1) {
+                                waitInterface("tun0");
+                            } else {
+                                waitInterface(wireguardProfile);
+                            }
+                        } else if (autostartVPN == 3) {
+                            Script.startGoogleOneVPN();
+                            waitInterface("tun0");
+                        } else if (autostartVPN == 4) {
+                            Script.startCloudflare1111Warp();
+                            waitInterface("tun0");
                         }
                         Script.configureRNDIS();
                         tetherActive = true;
@@ -183,20 +194,21 @@ public class ForegroundService extends Service {
                 natApplied = false;
                 tetherActive = false;
 
-                boolean startWireGuard = sharedPref.getBoolean("startWireGuard", false);
-                String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                if (startWireGuard) {
+                int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                if (autostartVPN == 1 || autostartVPN == 2) {
+                    String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                     Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
                     i.setPackage("com.wireguard.android");
                     i.putExtra("tunnel", wireguardProfile);
                     sendBroadcast(i);
                 }
+                // Add support for stopping VPNs
             }
         }
     };
 
     // Try to detect VPN disconnects and restart it if possible
-    private final BroadcastReceiver CONReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver VPNReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
@@ -208,6 +220,7 @@ public class ForegroundService extends Service {
             Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
 
             if (tetherActive && natApplied && tetherInterface.equals("tun0")) {
                 NetworkInterface currentInterface = null;
@@ -217,7 +230,11 @@ public class ForegroundService extends Service {
                     e.printStackTrace();
                 }
                 if (currentInterface == null) {
-                    Script.startGoogleOneVPN();
+                    if (autostartVPN == 3) {
+                        Script.startGoogleOneVPN();
+                    } else if (autostartVPN == 4) {
+                        Script.startCloudflare1111Warp();
+                    }
                     waitInterface("tun0");
                     // Update the SNAT address if necessary
                     String newAddr = setupSNAT(tetherInterface, ipv6SNAT);
@@ -281,9 +298,9 @@ public class ForegroundService extends Service {
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        int vpnWatchdog = sharedPref.getInt("vpnWatchdog", 0);
-        if (vpnWatchdog > 0) {
-            registerReceiver(CONReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+        int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+        if (autostartVPN > 2) {
+            registerReceiver(VPNReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
         }
 
         return Service.START_STICKY;
@@ -296,6 +313,7 @@ public class ForegroundService extends Service {
             wakeLock.release();
         }
         unregisterReceiver(USBReceiver);
+        unregisterReceiver(VPNReceiver);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
