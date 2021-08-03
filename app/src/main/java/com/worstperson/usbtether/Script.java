@@ -198,12 +198,12 @@ public class Script {
     }
 
     static void stopGoogleOneVPN() {
-        Log.w("USBTether", "Starting Google One VPN");
+        Log.w("USBTether", "Stopping Google One VPN");
         shellCommand("am force-stop com.google.android.apps.subscriptions.red");
     }
 
     static void startCloudflare1111Warp() {
-        Log.w("USBTether", "Stopping Cloudflare 1.1.1.1 Warp");
+        Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
         shellCommand("am start -W com.cloudflare.onedotonedotonedotone/com.cloudflare.app.presentation.main.MainActivity");
         shellCommand("am startservice com.cloudflare.onedotonedotonedotone/com.cloudflare.app.vpnservice.CloudflareVpnService");
     }
