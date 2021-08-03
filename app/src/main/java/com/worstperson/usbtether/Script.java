@@ -191,6 +191,15 @@ public class Script {
         shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
     }
 
+    static Boolean testConnection(String tetherInterface) {
+        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+            Log.i("usbtether", tetherInterface + " is online");
+            return true;
+        }
+        Log.w("usbtether", tetherInterface + " is offline");
+        return false;
+    }
+
     static void startGoogleOneVPN() {
         Log.w("USBTether", "Starting Google One VPN");
         shellCommand("am start -W com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");

@@ -229,7 +229,7 @@ public class ForegroundService extends Service {
         try {
             Process ipProcess = runtime.exec("ping -c 1 8.8.8.8");
             if (ipProcess.waitFor() == 0) {
-                Log.w("usbtether", "NETWORK ONLINE");
+                Log.i("usbtether", "NETWORK ONLINE");
                 return true;
             }
         } catch (IOException | InterruptedException e) {
@@ -263,19 +263,13 @@ public class ForegroundService extends Service {
                     if (tetherActive && natApplied) {
                         // Checks if we need to update
                         // this repeats too much
-                        NetworkInterface netint = null;
-                        try {
-                            netint = NetworkInterface.getByName(lastNetwork);
-                        } catch (SocketException e) {
-                            e.printStackTrace();
-                        }
-                        if (netint == null) {
-                            Log.w("usbtether", "Interface changed");
+                        if (!Script.testConnection(lastNetwork)) {
+                            Log.w("usbtether", "Tethered interface offline");
                             needsReset = true;
                         }
-                        String newAddr1 = setupSNAT(tetherInterface, ipv6SNAT);
+                        String newAddr1 = setupSNAT(lastNetwork, ipv6SNAT);
                         if (ipv6SNAT && !newAddr1.equals(lastIPv6)) {
-                            Log.w("usbtether", "IPv6 Address changed");
+                            Log.w("usbtether", "IPv6 address changed");
                             needsReset = true;
                         }
                         if (needsReset) {
@@ -338,6 +332,7 @@ public class ForegroundService extends Service {
                                     blockReciever = false;
                                 } else {
                                     Log.w("usbtether", "Interface missing, waiting...");
+                                    needsReset = true;
                                 }
                             } else {
                                 Log.w("usbtether", "Resetting interface...");
@@ -361,6 +356,7 @@ public class ForegroundService extends Service {
                         }
                     }
                 } else {
+                    Log.w("usbtether", "Device is offline");
                     needsReset = true;
                 }
             } else {
