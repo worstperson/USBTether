@@ -52,7 +52,7 @@ public class Script {
         }
     }
 
-    static private void add_marked_routes(String ipv6Prefix) {
+    static void add_marked_routes(String ipv6Prefix) {
         Log.i("USBTether", "Adding marked routes");
         shellCommand("ndc network interface add 99 rndis0");
         shellCommand("ndc network route add 99 rndis0 192.168.42.0/24");
