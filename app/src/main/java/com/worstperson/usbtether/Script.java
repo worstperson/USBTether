@@ -60,10 +60,6 @@ public class Script {
         shellCommand("ndc network route add 99 rndis0 fe80::/64");
     }
 
-    static void rndis_up() {
-        shellCommand("ifconfig rndis0 up");
-    }
-
     static private void enable_ip_forwarding() {
         Log.i("USBTether", "Enabling IP forwarding");
         shellCommand("ndc ipfwd enable tethering");
@@ -142,7 +138,7 @@ public class Script {
         return false;
     }
 
-    static void resetInterface(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
+    static void resetInterface(boolean softReset, String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
@@ -179,50 +175,9 @@ public class Script {
             shellCommand("ndc interface clearaddrs rndis0");
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
-            Shell.su("setprop sys.usb.config \"adb\"").exec();
-        } else {
-            Log.w("USBTether", "Tether interface not configured");
-        }
-    }
-
-    // testing
-    static void resetInterface2(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
-        if (dnsmasq) {
-            shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
-        }
-        if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
-            Log.i("USBTether", "Restoring tether interface state");
-            if (fixTTL) {
-                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
-                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
+            if (!softReset) {
+                Shell.su("setprop sys.usb.config \"adb\"").exec();
             }
-            if (ipv6Masquerading || ipv6SNAT) {
-                String prefix = "natctrl";
-                String counter = prefix + "_tether";
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    prefix = "tetherctrl";
-                    counter = prefix;
-                }
-                if (ipv6SNAT) {
-                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + IPv6addr);
-                } else {
-                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
-                }
-                shellCommand("ip6tables -t nat -D POSTROUTING -j " + prefix + "_nat_POSTROUTING");
-                shellCommand("ip6tables -t nat -X " + prefix + "_nat_POSTROUTING");
-                shellCommand("ip6tables -t mangle -D tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -j DROP");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -g " + counter + "_counters");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -m state --state INVALID -j DROP");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i " + tetherInterface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
-            }
-            shellCommand("ndc ipfwd remove rndis0 " + tetherInterface);
-            shellCommand("ndc nat disable rndis0 " + tetherInterface + " 99");
-            shellCommand("ndc network interface remove 99 rndis0");
-            shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
-            shellCommand("ndc interface clearaddrs rndis0");
-            shellCommand("ndc interface setcfg rndis0 down");
-            shellCommand("ndc ipfwd disable tethering");
         } else {
             Log.w("USBTether", "Tether interface not configured");
         }
