@@ -4,6 +4,8 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
+import java.util.List;
+
 public class Script {
 
     static {
@@ -23,10 +25,10 @@ public class Script {
         shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
     }
 
-    static private boolean set_ip_addresses(String ipv6Prefix) {
+    static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Setting IP addresses");
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
-        shellCommand("ndc interface setcfg rndis0 192.168.42.129 24 up");
+        shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 3; waitTime++) {
             if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
@@ -52,10 +54,12 @@ public class Script {
         }
     }
 
-    static void add_marked_routes(String ipv6Prefix) {
+    static void add_marked_routes(String ipv4Addr, String ipv6Prefix) {
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         Log.i("USBTether", "Adding marked routes");
         shellCommand("ndc network interface add 99 rndis0");
-        shellCommand("ndc network route add 99 rndis0 192.168.42.0/24");
+
+        shellCommand("ndc network route add 99 rndis0 " + ipv4Prefix + ".0/24");
         shellCommand("ndc network route add 99 rndis0 " + ipv6Prefix + "/64");
         shellCommand("ndc network route add 99 rndis0 fe80::/64");
     }
@@ -100,7 +104,7 @@ public class Script {
         }
     }
 
-    static boolean configureNAT(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) {
+    static boolean configureNAT(String tetherInterface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
@@ -119,19 +123,20 @@ public class Script {
             if (dnsmasq) {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
-                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=192.168.42.10,192.168.42.99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
             }
         }
         return true;
     }
 
-    static boolean configureRoutes(String tetherInterface, String ipv6Prefix) {
+    static boolean configureRoutes(String tetherInterface, String ipv4Addr, String ipv6Prefix) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
         } else {
             forwardInterface(tetherInterface);
-            if (set_ip_addresses(ipv6Prefix)) {
-                add_marked_routes(ipv6Prefix);
+            if (set_ip_addresses(ipv4Addr, ipv6Prefix)) {
+                add_marked_routes(ipv4Addr, ipv6Prefix);
                 return true;
             }
         }
@@ -200,6 +205,23 @@ public class Script {
         }
         Log.w("usbtether", tetherInterface + " is offline");
         return false;
+    }
+
+    static String getRoute() {
+        // Picks the last route added so we can test if the internet is up
+        // Likely conflicts with the wireguard kernel module FIXME
+        // Not very robust FIXME
+        List<String> route = Shell.su("ip route | awk '/dev/ {print $3}'").exec().getOut();
+        if (route.size() > 0) {
+            int tmp = route.size() - 1;
+            while (tmp >= 0) {
+                if (!route.get(tmp).startsWith("rndis")) {
+                    return route.get(tmp);
+                }
+                tmp = tmp - 1;
+            }
+        }
+        return "";
     }
 
     static void startGoogleOneVPN() {

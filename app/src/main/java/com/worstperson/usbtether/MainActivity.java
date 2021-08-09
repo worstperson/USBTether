@@ -16,7 +16,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.text.Editable;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -40,6 +39,7 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -140,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
+        EditText ipv4_text = findViewById(R.id.ipv4_text);
         EditText wg_text = findViewById(R.id.wg_text);
         LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
 
@@ -155,6 +156,21 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        /*try {
+            Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
+            for (NetworkInterface netint : Collections.list(nets)){
+                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
+                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
+                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
+                            arraySpinner.add(netint.getName());
+                        }
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }*/
+
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
         boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
@@ -164,12 +180,14 @@ public class MainActivity extends AppCompatActivity {
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
+        String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
 
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
         ttl_switch.setChecked(fixTTL);
 
+        ipv4_text.setText(ipv4Addr);
         wg_text.setText(wireguardProfile);
 
         setInterfaceSpinner(tetherInterface, interface_spinner);
@@ -211,6 +229,7 @@ public class MainActivity extends AppCompatActivity {
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
+            ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
@@ -225,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             dnsmasq_switch.setEnabled(!isChecked);
             ttl_switch.setEnabled(!isChecked);
+            ipv4_text.setEnabled(!isChecked);
             wg_text.setEnabled(!isChecked);
             interface_spinner.setEnabled(!isChecked);
             nat_spinner.setEnabled(!isChecked);
@@ -339,6 +359,22 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        ipv4_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    Pattern sPattern = Pattern.compile("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
+                    if (sPattern.matcher(String.valueOf(ipv4_text.getText())).matches()) {
+                        SharedPreferences.Editor edit = sharedPref.edit();
+                        edit.putString("ipv4Addr", String.valueOf(ipv4_text.getText()));
+                        edit.apply();
+                        return false;
+                    }
+                }
+                return true;
+            }
+        });
+
         wg_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
@@ -353,10 +389,10 @@ public class MainActivity extends AppCompatActivity {
                         edit.putString("tetherInterface", tetherInterface);
                     }
                     edit.apply();
-                    return true;
+                    return false;
                 }
 
-                return false;
+                return true;
             }
         });
 

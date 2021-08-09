@@ -87,10 +87,35 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/nat_layout"
+        android:id="@+id/ip4_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/interface_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginRight="20pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="IPv4 Address:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <EditText
+            android:id="@+id/ipv4_text"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/nat_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/ip4_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"

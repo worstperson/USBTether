@@ -22,7 +22,6 @@ import androidx.core.app.NotificationCompat;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 
-import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -134,6 +133,7 @@ public class ForegroundService extends Service {
             Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+            String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
 
             // Some devices go into Discharging state rather then Not Charging
             // when charge control apps are used, so we can't use BatteryManager
@@ -189,14 +189,14 @@ public class ForegroundService extends Service {
                                 edit.putString("lastNetwork", tetherInterface);
                                 edit.putString("lastIPv6", ipv6Addr);
                                 edit.apply();
-                                natApplied = Script.configureNAT(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                                natApplied = Script.configureNAT(tetherInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
                             }
                         }
                         if (natApplied) {
                             // Google One VPN is trash and reconnects all the time, just restore it for now
                             // todo: find the minimal operation to bring the connection back up
                             boolean result = false;
-                            result = Script.configureRoutes(tetherInterface, ipv6Prefix);
+                            result = Script.configureRoutes(tetherInterface, ipv4Addr, ipv6Prefix);
                             if (!result) {
                                 Log.w("usbtether", "Resetting interface...");
                                 Script.resetInterface(false, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
@@ -231,22 +231,6 @@ public class ForegroundService extends Service {
         }
     };
 
-    private boolean isOnline() {
-        Runtime runtime = Runtime.getRuntime();
-        try {
-            Process ipProcess = runtime.exec("ping -c 1 8.8.8.8");
-            if (ipProcess.waitFor() == 0) {
-                Log.i("usbtether", "NETWORK ONLINE");
-                return true;
-            }
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-        Log.w("usbtether", "NETWORK OFFLINE");
-        return false;
-    }
-
-    // Try to detect VPN disconnects and restart it if possible
     private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -261,15 +245,16 @@ public class ForegroundService extends Service {
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
             NetworkInterface currentInterface = null;
 
             // Check Connection events and recover the tether operation
             if (!blockReciever) {
                 // TODO: this can return false switching from VPN -> WiFi
-
-                if (isOnline()) {
+                String routeDev = Script.getRoute();
+                if (Script.testConnection(routeDev)) {
                     if (tetherActive && natApplied) {
-                        if (!Script.testConnection(lastNetwork)) {
+                        if (!routeDev.equals(lastNetwork) && !Script.testConnection(lastNetwork)) {
                             Log.w("usbtether", "Tethered interface offline");
                             needsReset = true;
                         }
@@ -352,9 +337,9 @@ public class ForegroundService extends Service {
                                     edit.putString("lastNetwork", tetherInterface);
                                     edit.putString("lastIPv6", ipv6Addr);
                                     edit.apply();
-                                    natApplied = Script.configureNAT(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                                    natApplied = Script.configureNAT(tetherInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
                                     boolean result = false;
-                                    result = Script.configureRoutes(tetherInterface, ipv6Prefix);
+                                    result = Script.configureRoutes(tetherInterface, ipv4Addr, ipv6Prefix);
                                     if (!result) {
                                         Log.w("usbtether", "Resetting interface...");
                                         Script.resetInterface(false, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
