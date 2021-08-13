@@ -55,9 +55,9 @@ public class MainActivity extends AppCompatActivity {
         try {
             nets = NetworkInterface.getNetworkInterfaces();
             for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
+                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0") && !netint.getName().startsWith("v4-")) {
                     for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
+                        if (!arraySpinner.contains(netint.getName())) {
                             arraySpinner.add(netint.getName());
                         }
                     }
@@ -156,24 +156,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        /*try {
-            Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
-            for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
-                            arraySpinner.add(netint.getName());
-                        }
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }*/
-
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
-        boolean dnsmasq = sharedPref.getBoolean("dnsmasq", false);
+        boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);

@@ -21,8 +21,9 @@ public class Script {
         }
     }
 
-    static void forwardInterface(String tetherInterface) {
-        shellCommand("ndc ipfwd add rndis0 " + tetherInterface);
+    static void forwardInterface(String ipv4Interface, String ipv6Interface) {
+        shellCommand("ndc ipfwd add rndis0 " + ipv4Interface);
+        shellCommand("ndc ipfwd add rndis0 " + ipv6Interface);
     }
 
     static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix) {
@@ -58,7 +59,6 @@ public class Script {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         Log.i("USBTether", "Adding marked routes");
         shellCommand("ndc network interface add 99 rndis0");
-
         shellCommand("ndc network route add 99 rndis0 " + ipv4Prefix + ".0/24");
         shellCommand("ndc network route add 99 rndis0 " + ipv6Prefix + "/64");
         shellCommand("ndc network route add 99 rndis0 fe80::/64");
@@ -69,9 +69,9 @@ public class Script {
         shellCommand("ndc ipfwd enable tethering");
     }
 
-    static private void set_up_nat(String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
+    static private void set_up_nat(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
         Log.i("USBTether", "Setting up NAT");
-        shellCommand("ndc nat enable rndis0 " + tetherInterface + " 99");
+        shellCommand("ndc nat enable rndis0 " + ipv4Interface + " 99");
         if (ipv6Masquerading || ipv6SNAT) {
             String prefix = "natctrl";
             String counter = prefix+"_tether";
@@ -80,17 +80,17 @@ public class Script {
                 counter = prefix;
             }
             shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -g " + counter + "_counters");
-            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i " + tetherInterface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
-            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -m state --state INVALID -j DROP");
-            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -g " + counter + "_counters");
+            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
+            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -m state --state INVALID -j DROP");
+            shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -g " + counter + "_counters");
             shellCommand("ip6tables -t filter -A " + prefix + "_FORWARD -j DROP");
             shellCommand("ip6tables -t mangle -A tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
             shellCommand("ip6tables -t nat -N " + prefix + "_nat_POSTROUTING");
             shellCommand("ip6tables -t nat -A POSTROUTING -j " + prefix + "_nat_POSTROUTING");
             if (ipv6SNAT) {
-                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
+                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j SNAT --to " + ipv6Addr);
             } else {
-                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+                shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
             }
         }
     }
@@ -104,7 +104,7 @@ public class Script {
         }
     }
 
-    static boolean configureNAT(String tetherInterface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) {
+    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
@@ -113,11 +113,11 @@ public class Script {
             return false;
         } else {
             enable_ip_forwarding();
-            set_up_nat(tetherInterface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
+            set_up_nat(ipv4Interface, ipv6Interface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
             if (fixTTL) {
-                shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
+                shellCommand("iptables -t mangle -A FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
                 if (ipv6Masquerading || ipv6SNAT) { // Won't work with encapsulated traffic
-                    shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
+                    shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
             }
             if (dnsmasq) {
@@ -130,11 +130,11 @@ public class Script {
         return true;
     }
 
-    static boolean configureRoutes(String tetherInterface, String ipv4Addr, String ipv6Prefix) {
+    static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
         } else {
-            forwardInterface(tetherInterface);
+            forwardInterface(ipv4Interface, ipv6Interface);
             if (set_ip_addresses(ipv4Addr, ipv6Prefix)) {
                 add_marked_routes(ipv4Addr, ipv6Prefix);
                 return true;
@@ -143,15 +143,15 @@ public class Script {
         return false;
     }
 
-    static void resetInterface(boolean softReset, String tetherInterface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
+    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
         if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
             if (fixTTL) {
-                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j TTL --ttl-set 64");
-                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + tetherInterface + " -j HL --hl-set 64");
+                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
+                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
             }
             if (ipv6Masquerading || ipv6SNAT) {
                 String prefix = "natctrl";
@@ -161,20 +161,23 @@ public class Script {
                     counter = prefix;
                 }
                 if (ipv6SNAT) {
-                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + IPv6addr);
+                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j SNAT --to " + IPv6addr);
                 } else {
-                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j MASQUERADE");
+                    shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
                 }
                 shellCommand("ip6tables -t nat -D POSTROUTING -j " + prefix + "_nat_POSTROUTING");
                 shellCommand("ip6tables -t nat -X " + prefix + "_nat_POSTROUTING");
                 shellCommand("ip6tables -t mangle -D tetherctrl_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
                 shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -j DROP");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -g " + counter + "_counters");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + tetherInterface + " -m state --state INVALID -j DROP");
-                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i " + tetherInterface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
+                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -g " + counter + "_counters");
+                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -m state --state INVALID -j DROP");
+                shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
             }
-            shellCommand("ndc ipfwd remove rndis0 " + tetherInterface);
-            shellCommand("ndc nat disable rndis0 " + tetherInterface + " 99");
+            shellCommand("ndc ipfwd remove rndis0 " + ipv6Interface);
+            if (!ipv6Interface.equals(ipv4Interface)) {
+                shellCommand("ndc ipfwd remove rndis0 " + ipv4Interface);
+            }
+            shellCommand("ndc nat disable rndis0 " + ipv4Interface + " 99");
             shellCommand("ndc network interface remove 99 rndis0");
             shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
             shellCommand("ndc interface clearaddrs rndis0");

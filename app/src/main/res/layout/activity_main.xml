@@ -87,10 +87,33 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/ip4_layout"
+        android:id="@+id/dnsmasq_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/interface_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginTop="5pt"
+        android:layout_marginRight="20pt"
+        android:layout_marginBottom="5pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Enable Dnsmasq:"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <Switch
+            android:id="@+id/dnsmasq_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ip4_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/dnsmasq_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginRight="20pt"
         android:orientation="horizontal">
@@ -158,33 +181,10 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dnsmasq_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/prefix_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Enable Dnsmasq:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Switch
-            android:id="@+id/dnsmasq_switch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="false" />
-    </LinearLayout>
-
-    <LinearLayout
         android:id="@+id/ttl_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/dnsmasq_layout"
+        android:layout_below="@id/prefix_layout"
         android:layout_marginLeft="20pt"
         android:layout_marginTop="5pt"
         android:layout_marginRight="20pt"
