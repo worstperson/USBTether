@@ -55,9 +55,9 @@ public class MainActivity extends AppCompatActivity {
         try {
             nets = NetworkInterface.getNetworkInterfaces();
             for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0") && !netint.getName().startsWith("v4-")) {
+                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
                     for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (!arraySpinner.contains(netint.getName())) {
+                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
                             arraySpinner.add(netint.getName());
                         }
                     }
