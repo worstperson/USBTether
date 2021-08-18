@@ -210,23 +210,6 @@ public class Script {
         return false;
     }
 
-    static String getRoute() {
-        // Picks the last route added so we can test if the internet is up
-        // Likely conflicts with the wireguard kernel module FIXME
-        // Not very robust FIXME
-        List<String> route = Shell.su("ip route | awk '/dev/ {print $3}'").exec().getOut();
-        if (route.size() > 0) {
-            int tmp = route.size() - 1;
-            while (tmp >= 0) {
-                if (!route.get(tmp).startsWith("rndis")) {
-                    return route.get(tmp);
-                }
-                tmp = tmp - 1;
-            }
-        }
-        return "";
-    }
-
     static void startGoogleOneVPN() {
         Log.w("USBTether", "Starting Google One VPN");
         shellCommand("am start -W com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
