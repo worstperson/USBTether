@@ -142,7 +142,9 @@ public class MainActivity extends AppCompatActivity {
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
         EditText ipv4_text = findViewById(R.id.ipv4_text);
         EditText wg_text = findViewById(R.id.wg_text);
+        LinearLayout prefix_layout = findViewById(R.id.prefix_layout);
         LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
+
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
@@ -222,6 +224,10 @@ public class MainActivity extends AppCompatActivity {
             vpn_spinner.setEnabled(false);
         }
 
+        if (!ipv6Masquerading && !ipv6SNAT) {
+            prefix_layout.setVisibility(View.GONE);
+        }
+
         if (autostartVPN != 1 && autostartVPN != 2) {
             wgp_layout.setVisibility(View.GONE);
         }
@@ -283,12 +289,15 @@ public class MainActivity extends AppCompatActivity {
                 if (item.equals("Masquerading")) {
                     edit.putBoolean("ipv6Masquerading", true);
                     edit.putBoolean("ipv6SNAT", false);
+                    prefix_layout.setVisibility(View.VISIBLE);
                 } else if (item.equals("SNAT")) {
                     edit.putBoolean("ipv6Masquerading", false);
                     edit.putBoolean("ipv6SNAT", true);
+                    prefix_layout.setVisibility(View.VISIBLE);
                 } else {
                     edit.putBoolean("ipv6Masquerading", false);
                     edit.putBoolean("ipv6SNAT", false);
+                    prefix_layout.setVisibility(View.GONE);
                 }
                 edit.apply();
             }
