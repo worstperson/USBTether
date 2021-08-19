@@ -212,6 +212,7 @@ public class Script {
 
     static void startGoogleOneVPN() {
         Log.w("USBTether", "Starting Google One VPN");
+        shellCommand("input keyevent KEYCODE_WAKEUP");
         shellCommand("am start -W com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
         shellCommand("am startservice com.google.android.apps.subscriptions.red/com.google.android.libraries.privacy.ppn.PpnVpnService");
     }
@@ -223,6 +224,7 @@ public class Script {
 
     static void startCloudflare1111Warp() {
         Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
+        shellCommand("input keyevent KEYCODE_WAKEUP");
         shellCommand("am start -W com.cloudflare.onedotonedotonedotone/com.cloudflare.app.presentation.main.MainActivity");
         shellCommand("am startservice com.cloudflare.onedotonedotonedotone/com.cloudflare.app.vpnservice.CloudflareVpnService");
     }
