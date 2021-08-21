@@ -23,11 +23,17 @@ public class Script {
 
     static void forwardInterface(String ipv4Interface, String ipv6Interface) {
         shellCommand("ndc ipfwd add rndis0 " + ipv4Interface);
-        shellCommand("ndc ipfwd add rndis0 " + ipv6Interface);
+        if (!ipv4Interface.equals(ipv6Interface)) { // this check is not needed
+            shellCommand("ndc ipfwd add rndis0 " + ipv6Interface);
+        }
     }
 
-    static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix) {
+    static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         Log.i("USBTether", "Setting IP addresses");
+        if (ipv6Masquerading || ipv6SNAT) {
+            shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
+            return true;
+        }
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
         shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
@@ -124,18 +130,22 @@ public class Script {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-                shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                if (ipv6Masquerading || ipv6SNAT) {
+                    shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                } else {
+                    shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                }
             }
         }
         return true;
     }
 
-    static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
+    static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
         } else {
             forwardInterface(ipv4Interface, ipv6Interface);
-            if (set_ip_addresses(ipv4Addr, ipv6Prefix)) {
+            if (set_ip_addresses(ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                 add_marked_routes(ipv4Addr, ipv6Prefix);
                 return true;
             }

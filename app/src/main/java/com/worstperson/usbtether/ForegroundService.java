@@ -206,7 +206,7 @@ public class ForegroundService extends Service {
                             // Google One VPN is trash and reconnects all the time, just restore it for now
                             // todo: find the minimal operation to bring the connection back up
                             boolean result = false;
-                            result = Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix);
+                            result = Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
                             if (!result) {
                                 Log.w("usbtether", "Resetting interface...");
                                 Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
@@ -396,7 +396,7 @@ public class ForegroundService extends Service {
                                 edit.apply();
                                 natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
                                 boolean result = false;
-                                result = Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix);
+                                result = Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
                                 if (!result) {
                                     Log.w("usbtether", "Resetting interface...");
                                     Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
