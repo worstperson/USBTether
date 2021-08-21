@@ -16,6 +16,7 @@ import android.net.Network;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
+import android.util.Pair;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
 
@@ -27,7 +28,9 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 
 public class ForegroundService extends Service {
 
@@ -61,16 +64,11 @@ public class ForegroundService extends Service {
     private boolean waitInterface(String tetherInterface) {
         //We need to wait for the interface to become configured
         int count = 1;
-        while (count < 10) { // this is too long, but sometimes required
+        while (count < 10) {
             Log.i("usbtether", "Waiting for " + tetherInterface + "..." + count);
             try {
-                if (NetworkInterface.getByName(tetherInterface) != null) {
-                    // needed? FIXME
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+                // fixme - this ping test does not belong here
+                if (NetworkInterface.getByName(tetherInterface) != null && Script.testConnection(tetherInterface)) {
                     return true;
                 }
             } catch (SocketException e) {
@@ -106,6 +104,7 @@ public class ForegroundService extends Service {
         return ipv6Addr;
     }
 
+    // todo: try not resetting, don't disable unless the service is
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -211,10 +210,13 @@ public class ForegroundService extends Service {
                             if (!result) {
                                 Log.w("usbtether", "Resetting interface...");
                                 Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                                blockReciever = true;
                                 natApplied = false;
-                                tetherActive = false;
+                                tetherActive = true;
+                                Script.configureRNDIS();
+                            } else {
+                                blockReciever = false;
                             }
-                            blockReciever = false;
                         }
                     }
                 } else {
@@ -226,7 +228,8 @@ public class ForegroundService extends Service {
                 natApplied = false;
                 tetherActive = false;
 
-                int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                // This code doesn't belong here. Don't drop the tunnel unless it actually died.
+                /*int autostartVPN = sharedPref.getInt("autostartVPN", 0);
                 if (autostartVPN == 1 || autostartVPN == 2) {
                     String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                     Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
@@ -237,12 +240,14 @@ public class ForegroundService extends Service {
                     Script.stopGoogleOneVPN();
                 } else if (autostartVPN == 4) {
                     Script.stopCloudflare1111Warp();
-                }
+                }*/
             }
         }
     };
 
     // This does not broadcast on mobile changes (ex. 3g->lte)
+    // This does not broadcast on WireGuard's kernel module interface
+    // TODO track the state of interfaces to figure out why we were invoked
     private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -264,6 +269,25 @@ public class ForegroundService extends Service {
                 ipv4Prefix = "v4-";
             }
             NetworkInterface checkInterface = null;
+
+            // Build interface list
+            /*Enumeration<NetworkInterface> nets;
+            try {
+                ArrayList<Pair<String, Boolean>> netList = new ArrayList<>();
+                nets = NetworkInterface.getNetworkInterfaces();
+                for (NetworkInterface netint : Collections.list(nets)) {
+                    netList.add(new Pair<>(netint.getName(), netint.isUp()));
+                }
+
+                for (Pair pair : netList) {
+                    //Boolean.parseBoolean();
+                    Log.i("usbtether", pair.first.toString());
+                    Log.i("usbtether", pair.second.toString());
+                }
+
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }*/
 
             // Check Connection events and recover the tether operation
             if (!blockReciever) {
@@ -376,8 +400,10 @@ public class ForegroundService extends Service {
                                 if (!result) {
                                     Log.w("usbtether", "Resetting interface...");
                                     Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                                    blockReciever = true;
                                     natApplied = false;
-                                    tetherActive = false;
+                                    tetherActive = true;
+                                    Script.configureRNDIS();
                                 }
                             }
                         }

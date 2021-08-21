@@ -31,7 +31,7 @@ public class Script {
         shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev rndis0 scope global");
         shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
-        for (int waitTime = 1; waitTime <= 3; waitTime++) {
+        for (int waitTime = 1; waitTime <= 5; waitTime++) {
             if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
                 break;
             }
@@ -222,6 +222,7 @@ public class Script {
         shellCommand("am force-stop com.google.android.apps.subscriptions.red");
     }
 
+    // FIXME - this still has trouble launching on failure, even with no lockscreen
     static void startCloudflare1111Warp() {
         Log.w("USBTether", "Starting Cloudflare 1.1.1.1 Warp");
         shellCommand("input keyevent KEYCODE_WAKEUP");

@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             nets = NetworkInterface.getNetworkInterfaces();
             for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.isVirtual() && !netint.getName().equals("rndis0")) {
+                if (netint.isUp() && !netint.isLoopback() && !netint.getName().equals("rndis0")) {
                     for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
                         if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
                             arraySpinner.add(netint.getName());
@@ -144,7 +144,6 @@ public class MainActivity extends AppCompatActivity {
         EditText wg_text = findViewById(R.id.wg_text);
         LinearLayout prefix_layout = findViewById(R.id.prefix_layout);
         LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
-
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
