@@ -30,7 +30,7 @@ public class Script {
 
     static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         Log.i("USBTether", "Setting IP addresses");
-        if (ipv6Masquerading || ipv6SNAT) {
+        if (!ipv6Masquerading && !ipv6SNAT) {
             shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
             return true;
         }
