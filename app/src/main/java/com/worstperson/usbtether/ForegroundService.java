@@ -103,6 +103,9 @@ public class ForegroundService extends Service {
 
     // todo: try not resetting, don't disable unless the service is
     // TODO - improve receiver handling, stop locking the thread
+    // FIXME - BUG - disable IPv6 when IPv6 is unavailable
+    // FIXME - FEATURE - disable IPv6 when MTU is lower than spec allows
+    //  (AT&T Cricket has broken IPv6, MTU is set to the minimum for IPv4, don't use it)
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -248,7 +251,6 @@ public class ForegroundService extends Service {
     // This does broadcast on mobile data availability
     // TODO track the state of interfaces to figure out why we were invoked
     // FIXME - CHECKME - missing check for no active interface????
-
     private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -277,13 +279,14 @@ public class ForegroundService extends Service {
                 boolean isUp = false;
                 try {
                     checkInterface = NetworkInterface.getByName(currentInterface);
-                    isUp = checkInterface.isUp();
+                    if (checkInterface != null) { // Exception passed try block; Stop being lazy
+                        isUp = checkInterface.isUp();
+                    }
                 } catch (SocketException e) {
                     e.printStackTrace();
                 }
                 if (tetherActive && natApplied) {
                     Log.w("usbtether", "Tether is active...");
-                    // Check for valid network
                     if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
                         if (tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork)) {
                             Log.w("usbtether", "Network changed, reconnecting...");
