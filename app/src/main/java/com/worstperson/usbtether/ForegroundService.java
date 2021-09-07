@@ -101,6 +101,36 @@ public class ForegroundService extends Service {
         return ipv6Addr;
     }
 
+    private void startVPN(int autostartVPN, String wireguardProfile) {
+        if (autostartVPN == 1 || autostartVPN == 2) {
+            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+            i.setPackage("com.wireguard.android");
+            i.putExtra("tunnel", wireguardProfile);
+            sendBroadcast(i);
+            if (autostartVPN == 1) {
+                waitInterface("tun0");
+            } else {
+                // This might not get triggered, idk
+                waitInterface(wireguardProfile);
+            }
+        } else {
+            NetworkInterface checkInterface = null;
+            try {
+                checkInterface = NetworkInterface.getByName("tun0");
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
+            if (checkInterface == null) {
+                if (autostartVPN == 3) {
+                    Script.startGoogleOneVPN();
+                } else if (autostartVPN == 4) {
+                    Script.startCloudflare1111Warp();
+                }
+                waitInterface("tun0");
+            }
+        }
+    }
+
     // todo: try not resetting, don't disable unless the service is
     // TODO - improve receiver handling, stop locking the thread
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
@@ -121,6 +151,8 @@ public class ForegroundService extends Service {
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
             Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
+            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             String ipv4Prefix = "";
             if (isXLAT) {
                 ipv4Prefix = "v4-";
@@ -135,26 +167,8 @@ public class ForegroundService extends Service {
                     if (!tetherActive) {
                         blockReciever = true;
                         Log.i("usbtether", "Configuring interface...");
-                        int autostartVPN = sharedPref.getInt("autostartVPN", 0);
                         if (autostartVPN > 0) {
-                            if (autostartVPN == 1 || autostartVPN == 2) {
-                                String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                                Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
-                                i.setPackage("com.wireguard.android");
-                                i.putExtra("tunnel", wireguardProfile);
-                                sendBroadcast(i);
-                                if (autostartVPN == 1) {
-                                    waitInterface("tun0");
-                                } else {
-                                    waitInterface(wireguardProfile);
-                                }
-                            } else if (autostartVPN == 3) {
-                                Script.startGoogleOneVPN();
-                                waitInterface("tun0");
-                            } else if (autostartVPN == 4) {
-                                Script.startCloudflare1111Warp();
-                                waitInterface("tun0");
-                            }
+                            startVPN(autostartVPN, wireguardProfile);
                         }
                         tetherInterface = pickInterface(tetherInterface);
                         NetworkInterface currentInterface = null;
@@ -264,9 +278,10 @@ public class ForegroundService extends Service {
             Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
-            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
             Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
+            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             String ipv4Prefix = "";
             if (isXLAT) {
                 ipv4Prefix = "v4-";
@@ -338,33 +353,8 @@ public class ForegroundService extends Service {
                             if (autostartVPN > 0 && !isUp) {
                                 Log.w("usbtether", "VPN down, restarting...");
                                 blockReciever = true;
-                                if (autostartVPN == 1 || autostartVPN == 2) {
-                                    String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                                    Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
-                                    i.setPackage("com.wireguard.android");
-                                    i.putExtra("tunnel", wireguardProfile);
-                                    sendBroadcast(i);
-                                    if (autostartVPN == 1) {
-                                        waitInterface("tun0");
-                                    } else {
-                                        // This might not get triggered, idk
-                                        waitInterface(wireguardProfile);
-                                    }
-                                } else {
-                                    try {
-                                        checkInterface = NetworkInterface.getByName("tun0");
-                                    } catch (SocketException e) {
-                                        e.printStackTrace();
-                                    }
-                                    if (checkInterface == null) {
-                                        if (autostartVPN == 3) {
-                                            Script.startGoogleOneVPN();
-                                        } else if (autostartVPN == 4) {
-                                            Script.startCloudflare1111Warp();
-                                        }
-                                        waitInterface("tun0");
-                                    }
-                                }
+                                startVPN(autostartVPN, wireguardProfile);
+                                needsReset = true;
                             }
                             if (isUp) {
                                 if (needsReset) {
