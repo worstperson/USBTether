@@ -228,8 +228,17 @@ public class ForegroundService extends Service {
                         // Restart VPN if needed
                         if (autostartVPN > 0 && !isUp) {
                             Log.w("usbtether", "VPN down, restarting...");
+                            // this should trigger a CONNECTIVITY_CHANGE event, I guess...
                             startVPN(autostartVPN, wireguardProfile);
                             needsReset = true;
+                            try {
+                                checkInterface = NetworkInterface.getByName(currentInterface);
+                                if (checkInterface != null) { // Exception passed try block; Stop being lazy
+                                    isUp = checkInterface.isUp();
+                                }
+                            } catch (SocketException e) {
+                                e.printStackTrace();
+                            }
                         }
                         if (isUp) {
                             if (needsReset) {
@@ -265,6 +274,22 @@ public class ForegroundService extends Service {
             } else if (!tetherActive) {
                 Log.i("usbtether", "Checking if tethering should be started...");
                 // Tethering not configured, start configuring
+                // FIXME - this is dup code, refactor
+                // Restart VPN if needed
+                if (autostartVPN > 0 && !isUp) {
+                    Log.w("usbtether", "VPN down, restarting...");
+                    // this should trigger a CONNECTIVITY_CHANGE event, I guess...
+                    startVPN(autostartVPN, wireguardProfile);
+                    needsReset = true;
+                    try {
+                        checkInterface = NetworkInterface.getByName(currentInterface);
+                        if (checkInterface != null) { // Exception passed try block; Stop being lazy
+                            isUp = checkInterface.isUp();
+                        }
+                    } catch (SocketException e) {
+                        e.printStackTrace();
+                    }
+                }
                 if (isUp) {
                     Log.i("usbtether", "Starting tether...");
                     natApplied = false;
