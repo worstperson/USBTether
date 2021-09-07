@@ -221,6 +221,8 @@ public class MainActivity extends AppCompatActivity {
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
             vpn_spinner.setEnabled(false);
+        } else if (autostartVPN > 0) {
+            interface_spinner.setEnabled(false);
         }
 
         if (!ipv6Masquerading && !ipv6SNAT) {
@@ -236,7 +238,9 @@ public class MainActivity extends AppCompatActivity {
             ttl_switch.setEnabled(!isChecked);
             ipv4_text.setEnabled(!isChecked);
             wg_text.setEnabled(!isChecked);
-            interface_spinner.setEnabled(!isChecked);
+            if (autostartVPN == 0) {
+                interface_spinner.setEnabled(!isChecked);
+            }
             nat_spinner.setEnabled(!isChecked);
             prefix_spinner.setEnabled(!isChecked);
             vpn_spinner.setEnabled(!isChecked);
@@ -328,6 +332,7 @@ public class MainActivity extends AppCompatActivity {
                 switch (position) {
                     case 0:
                         wgp_layout.setVisibility(View.GONE);
+                        interface_spinner.setEnabled(true);
                         break;
                     case 1: case 2:
                         wgp_layout.setVisibility(View.VISIBLE);
@@ -336,10 +341,12 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             tetherInterface = wireguardProfile;
                         }
+                        interface_spinner.setEnabled(false);
                         break;
                     default:
                         wgp_layout.setVisibility(View.GONE);
                         tetherInterface = "tun0";
+                        interface_spinner.setEnabled(false);
                 }
                 if (position > 0) {
                     setInterfaceSpinner(tetherInterface, interface_spinner);
