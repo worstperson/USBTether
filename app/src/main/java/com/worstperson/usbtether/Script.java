@@ -16,7 +16,7 @@ public class Script {
     }
 
     static private void shellCommand(String command) {
-        for ( String message : Shell.su(command).exec().getOut() ) {
+        for (String message : Shell.su(command).exec().getOut()) {
             Log.i("USBTether", message);
         }
     }

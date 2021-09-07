@@ -13,6 +13,7 @@ import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
@@ -39,8 +40,8 @@ public class ForegroundService extends Service {
     static public Boolean isStarted = false;
     private Boolean tetherActive = false;
     private boolean natApplied = false;
-    private boolean blockReciever = false;
     private boolean needsReset = false;
+    private boolean usbReconnect = false;
 
     private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
@@ -131,144 +132,25 @@ public class ForegroundService extends Service {
         }
     }
 
-    // todo: try not resetting, don't disable unless the service is
-    // TODO - improve receiver handling, stop locking the thread
+    private boolean checkUSB(Context context) {
+        Intent batteryStatus = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (batteryStatus != null && batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) == BatteryManager.BATTERY_PLUGGED_USB) {
+            Log.w("USBTether", "Connected to tetherable device");
+            return true;
+        } else {
+            Log.w("USBTether", "Not connected to tetherable device");
+            return false;
+        }
+    }
+
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
     // FIXME - FEATURE - disable IPv6 when MTU is lower than spec allows
     //  (AT&T Cricket has broken IPv6, MTU is set to the minimum for IPv4, don't use it)
-    private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.i("usbtether", "Recieved USB_STATE broadcast");
-            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
-            String lastNetwork = sharedPref.getString("lastNetwork", "");
-            String lastIPv6 = sharedPref.getString("lastIPv6", "");
-            Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-            Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
-            Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-            Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
-            String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
-            String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
-            Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
-            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
-            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-            String ipv4Prefix = "";
-            if (isXLAT) {
-                ipv4Prefix = "v4-";
-            }
-
-            // Some devices go into Discharging state rather then Not Charging
-            // when charge control apps are used, so we can't use BatteryManager
-            // This actually works way better anyway, even though it's undocumented
-            if (intent.getExtras().getBoolean("connected")) {
-                Log.i("usbtether", "USB Connected");
-                if (intent.getExtras().getBoolean("configured")) {
-                    if (!tetherActive) {
-                        blockReciever = true;
-                        Log.i("usbtether", "Configuring interface...");
-                        if (autostartVPN > 0) {
-                            startVPN(autostartVPN, wireguardProfile);
-                        }
-                        tetherInterface = pickInterface(tetherInterface);
-                        NetworkInterface currentInterface = null;
-                        try {
-                            currentInterface = NetworkInterface.getByName(tetherInterface);
-                        } catch (SocketException e) {
-                            e.printStackTrace();
-                        }
-                        if (currentInterface != null) {
-                            tetherActive = true;
-                            Script.configureRNDIS();
-                        } else {
-                            blockReciever = false;
-                        }
-                    } else {
-                        if (!natApplied) {
-                            String currentInterface = pickInterface(tetherInterface);
-                            if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto") && waitInterface(currentInterface)) {
-                                String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
-                                lastNetwork = currentInterface;
-                                lastIPv6 = ipv6Addr;
-                                SharedPreferences.Editor edit = sharedPref.edit();
-                                edit.putString("lastNetwork", currentInterface);
-                                edit.putString("lastIPv6", ipv6Addr);
-                                edit.putBoolean("isXLAT", false); // idk, seems lazy
-                                ipv4Prefix = "";
-
-                                if (tetherInterface.equals("Auto")) {
-                                    try { //Check for separate CLAT interface
-                                        NetworkInterface netint = NetworkInterface.getByName("v4-" + currentInterface);
-                                        if (netint != null) {
-                                            for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                                                if (inetAddress instanceof Inet4Address) {
-                                                    ipv4Prefix = "v4-";
-                                                    edit.putBoolean("isXLAT", true);
-                                                }
-                                            }
-                                        }
-                                    } catch (SocketException e) {
-                                        e.printStackTrace();
-                                    }
-                                }
-
-                                edit.apply();
-                                tetherInterface = currentInterface;
-                                natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
-                            }
-                        }
-                        if (natApplied) {
-                            // Google One VPN is trash and reconnects all the time, just restore it for now
-                            // todo: find the minimal operation to bring the connection back up
-                            boolean result = false;
-                            result = Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
-                            if (!result) {
-                                Log.w("usbtether", "Resetting interface...");
-                                Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                                blockReciever = true;
-                                natApplied = false;
-                                tetherActive = true;
-                                Script.configureRNDIS();
-                            } else {
-                                blockReciever = false;
-                            }
-                        }
-                    }
-                } else {
-                    Log.i("usbtether", "Interface not yet ready");
-                }
-            } else {
-                Log.i("usbtether", "USB Disconnected");
-                Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                natApplied = false;
-                tetherActive = false;
-
-                // This code doesn't belong here. Don't drop the tunnel unless it actually died.
-                /*int autostartVPN = sharedPref.getInt("autostartVPN", 0);
-                if (autostartVPN == 1 || autostartVPN == 2) {
-                    String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                    Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
-                    i.setPackage("com.wireguard.android");
-                    i.putExtra("tunnel", wireguardProfile);
-                    sendBroadcast(i);
-                } else if (autostartVPN == 3) {
-                    Script.stopGoogleOneVPN();
-                } else if (autostartVPN == 4) {
-                    Script.stopCloudflare1111Warp();
-                }*/
-            }
+    private void restoreTether(boolean isConnected) {
+        if (!isConnected) {
+            isConnected = checkUSB(this);
         }
-    };
-
-    // This does not broadcast on mobile changes (ex. 3g->lte)
-    // This does not broadcast on WireGuard's kernel module interface
-    // This does broadcast on mobile data availability
-    // TODO track the state of interfaces to figure out why we were invoked
-    // FIXME - CHECKME - missing check for no active interface????
-    private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.i("usbtether", "Recieved CONNECTIVITY_CHANGE broadcast");
+        if (isConnected) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -279,7 +161,7 @@ public class ForegroundService extends Service {
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
-            Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
+            boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             String ipv4Prefix = "";
@@ -288,112 +170,184 @@ public class ForegroundService extends Service {
             }
 
             // Check Connection events and recover the tether operation
-            if (!blockReciever) {
-                String currentInterface = pickInterface(tetherInterface);
-                NetworkInterface checkInterface = null;
-                boolean isUp = false;
-                try {
-                    checkInterface = NetworkInterface.getByName(currentInterface);
-                    if (checkInterface != null) { // Exception passed try block; Stop being lazy
-                        isUp = checkInterface.isUp();
-                    }
-                } catch (SocketException e) {
-                    e.printStackTrace();
+            String currentInterface = pickInterface(tetherInterface);
+            NetworkInterface checkInterface = null;
+            boolean isUp = false;
+            try {
+                checkInterface = NetworkInterface.getByName(currentInterface);
+                if (checkInterface != null) { // Exception passed try block; Stop being lazy
+                    isUp = checkInterface.isUp();
                 }
-                if (tetherActive && natApplied) {
-                    Log.w("usbtether", "Tether is active...");
-                    if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
-                        if (tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork)) {
-                            Log.w("usbtether", "Network changed, reconnecting...");
-                            // Works for changing interfaces for now
-                            // Need to clean this up FIXME
-                            Log.w("usbtether", "Resetting interface...");
-                            Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                            natApplied = false;
-                            tetherActive = true;
-                            if (waitInterface(currentInterface)) {
-                                String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
-                                SharedPreferences.Editor edit = sharedPref.edit();
-                                edit.putString("lastNetwork", currentInterface);
-                                edit.putString("lastIPv6", ipv6Addr);
-                                edit.putBoolean("isXLAT", false); // hmm...
-                                ipv4Prefix = "";
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
+            if (tetherActive && natApplied) {
+                Log.w("usbtether", "Tether is active...");
+                if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
+                    if (tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork)) {
+                        Log.w("usbtether", "Network changed, reconnecting...");
+                        // Works for changing interfaces for now
+                        // Need to clean this up FIXME
+                        Log.w("usbtether", "Resetting interface...");
+                        Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                        natApplied = false;
+                        tetherActive = true;
+                        if (waitInterface(currentInterface)) {
+                            String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
+                            SharedPreferences.Editor edit = sharedPref.edit();
+                            edit.putString("lastNetwork", currentInterface);
+                            edit.putString("lastIPv6", ipv6Addr);
+                            edit.putBoolean("isXLAT", false); // hmm...
+                            ipv4Prefix = "";
 
-                                if (tetherInterface.equals("Auto")) {
-                                    try { //Check for separate CLAT interface
-                                        NetworkInterface netint = NetworkInterface.getByName("v4-" + currentInterface);
-                                        if (netint != null) {
-                                            for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                                                if (inetAddress instanceof Inet4Address) {
-                                                    ipv4Prefix = "v4-";
-                                                    edit.putBoolean("isXLAT", true);
-                                                }
-                                            }
+                            try { //Check for separate CLAT interface
+                                NetworkInterface netint = NetworkInterface.getByName("v4-" + currentInterface);
+                                if (netint != null) {
+                                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                                        if (inetAddress instanceof Inet4Address) {
+                                            ipv4Prefix = "v4-";
+                                            edit.putBoolean("isXLAT", true);
                                         }
-                                    } catch (SocketException e) {
-                                        e.printStackTrace();
                                     }
                                 }
+                            } catch (SocketException e) {
+                                e.printStackTrace();
+                            }
 
-                                edit.apply();
-                                natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
-                                boolean result = false;
-                                result = Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
-                                if (!result) {
+                            edit.apply();
+                            natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                            if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                                Log.w("usbtether", "Resetting interface...");
+                                Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                                natApplied = false;
+                                tetherActive = true;
+                                Script.configureRNDIS();
+                            }
+                        }
+                    } else {
+                        // Restart VPN if needed
+                        if (autostartVPN > 0 && !isUp) {
+                            Log.w("usbtether", "VPN down, restarting...");
+                            startVPN(autostartVPN, wireguardProfile);
+                            needsReset = true;
+                        }
+                        if (isUp) {
+                            if (needsReset) {
+                                Log.w("usbtether", "Restoring tether...");
+                                // Update SNAT if needed
+                                String newAddr = setupSNAT(currentInterface, ipv6SNAT);
+                                if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
+                                    Script.refreshSNAT(currentInterface, lastIPv6, newAddr);
+                                    SharedPreferences.Editor edit = sharedPref.edit();
+                                    edit.putString("lastIPv6", newAddr);
+                                    edit.apply();
+                                }
+
+                                if (usbReconnect && !Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                                     Log.w("usbtether", "Resetting interface...");
-                                    Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
-                                    blockReciever = true;
+                                    Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                                     natApplied = false;
                                     tetherActive = true;
                                     Script.configureRNDIS();
-                                }
-                            }
-                        } else {
-                            // Restart VPN if needed
-                            if (autostartVPN > 0 && !isUp) {
-                                Log.w("usbtether", "VPN down, restarting...");
-                                blockReciever = true;
-                                startVPN(autostartVPN, wireguardProfile);
-                                needsReset = true;
-                            }
-                            if (isUp) {
-                                if (needsReset) {
-                                    Log.w("usbtether", "Restoring tether...");
-                                    // Update SNAT if needed
-                                    String newAddr = setupSNAT(currentInterface, ipv6SNAT);
-                                    if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
-                                        Script.refreshSNAT(currentInterface, lastIPv6, newAddr);
-                                        SharedPreferences.Editor edit = sharedPref.edit();
-                                        edit.putString("lastIPv6", newAddr);
-                                        edit.apply();
-                                    }
+                                } else {
                                     // Brings tether back up on connection change
                                     Script.forwardInterface(ipv4Prefix + currentInterface, currentInterface);
-                                    blockReciever = false;
-                                    needsReset = false;
                                 }
-                            } else {
-                                Log.w("usbtether", "Interface down, setting reset flag...");
-                                needsReset = true;
+                                usbReconnect = false;
+                                needsReset = false;
                             }
+                        } else {
+                            Log.w("usbtether", "Interface down, setting reset flag...");
+                            needsReset = true;
                         }
                     }
-                } else if (!tetherActive) {
-                    Log.i("usbtether", "Checking if tethering should be started...");
-                    // Tethering not configured, start configuring
-                    if (isUp) {
-                        Log.i("usbtether", "Starting tether...");
-                        blockReciever = true;
+                }
+            } else if (!tetherActive) {
+                Log.i("usbtether", "Checking if tethering should be started...");
+                // Tethering not configured, start configuring
+                if (isUp) {
+                    Log.i("usbtether", "Starting tether...");
+                    natApplied = false;
+                    tetherActive = true;
+
+                    String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
+                    SharedPreferences.Editor edit = sharedPref.edit();
+                    edit.putString("lastNetwork", currentInterface);
+                    edit.putString("lastIPv6", ipv6Addr);
+                    edit.putBoolean("isXLAT", false); // idk, seems lazy
+                    ipv4Prefix = "";
+
+                    if (tetherInterface.equals("Auto")) {
+                        try { //Check for separate CLAT interface
+                            NetworkInterface netint = NetworkInterface.getByName("v4-" + currentInterface);
+                            if (netint != null) {
+                                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                                    if (inetAddress instanceof Inet4Address) {
+                                        ipv4Prefix = "v4-";
+                                        edit.putBoolean("isXLAT", true);
+                                    }
+                                }
+                            }
+                        } catch (SocketException e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    edit.apply();
+                    tetherInterface = currentInterface;
+                    natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                    if (natApplied && !Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                        Log.w("usbtether", "Resetting interface...");
+                        Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                         natApplied = false;
                         tetherActive = true;
                         Script.configureRNDIS();
-                    } else {
-                        Log.i("usbtether", tetherInterface + " not available");
                     }
+
+                } else {
+                    Log.i("usbtether", tetherInterface + " not available");
+                }
+            }
+        }
+    }
+
+    // Some devices go into Discharging state rather then Not Charging
+    // when charge control apps are used, so we can't use BatteryManager
+    // This actually works way better anyway, even though it's undocumented
+    private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.i("usbtether", "Recieved USB_STATE broadcast");
+            if (intent.getExtras().getBoolean("connected")) {
+                Log.i("usbtether", "USB Connected");
+                if (intent.getExtras().getBoolean("configured")) {
+                    Log.i("usbtether", "USB Configured");
+                    if (tetherActive && natApplied) {
+                        // Fix for Google One VPN
+                        needsReset = true;
+                    }
+                    restoreTether(true);
+                } else {
+                    Log.i("usbtether", "USB Not Configured");
                 }
             } else {
-                Log.w("usbtether", "Broadcast blocked...");
+                Log.i("usbtether", "USB Disconnected");
+                if (tetherActive && natApplied) {
+                    needsReset = true;
+                    usbReconnect = true;
+                }
             }
+        }
+    };
+
+    // This does not broadcast on mobile changes (ex. 3g->lte)
+    // This does not broadcast on WireGuard's kernel module interface
+    // This does broadcast on mobile data availability
+    private final BroadcastReceiver ConnectionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.i("usbtether", "Recieved CONNECTIVITY_CHANGE broadcast");
+            restoreTether(false);
         }
     };
 
@@ -435,6 +389,7 @@ public class ForegroundService extends Service {
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+        Script.configureRNDIS();
 
         return Service.START_STICKY;
     }
