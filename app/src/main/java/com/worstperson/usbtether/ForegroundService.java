@@ -243,7 +243,7 @@ public class ForegroundService extends Service {
                                     edit.apply();
                                 }
 
-                                if (usbReconnect && !Script.configureRoutes(ipv4Prefix + tetherInterface, tetherInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                                if (usbReconnect && !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                                     Log.w("usbtether", "Resetting interface...");
                                     Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
                                     natApplied = false;
