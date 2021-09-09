@@ -136,6 +136,7 @@ public class ForegroundService extends Service {
             boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+            String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
             String ipv4Prefix = "";
             if (isXLAT) {
                 ipv4Prefix = "v4-";
@@ -176,7 +177,7 @@ public class ForegroundService extends Service {
                         Log.w("usbtether", "Starting tether operation...");
                     } else {
                         Log.w("usbtether", "Network changed, resetting interface...");
-                        Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                        Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
                         natApplied = false;
                     }
                     if (waitInterface(currentInterface)) {
@@ -200,10 +201,10 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath());
+                        natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth);
                         if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                             Log.w("usbtether", "Failed configuring tether, resetting interface...");
-                            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
                             natApplied = false;
                             Script.configureRNDIS();
                         }
@@ -224,7 +225,7 @@ public class ForegroundService extends Service {
                             }
                             if (usbReconnect && !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                                 Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
-                                Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+                                Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
                                 natApplied = false;
                                 Script.configureRNDIS();
                             } else {
@@ -242,7 +243,7 @@ public class ForegroundService extends Service {
                     }
                 }
             } else {
-                Log.w("usbtether", "ERROR, invalid interface");
+                Log.w("usbtether", "Tether failed, invalid interface");
             }
         } else {
             Log.i("usbtether", "USB not connected");
@@ -350,15 +351,17 @@ public class ForegroundService extends Service {
         Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
+        String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
         Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
+        String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         String ipv4Prefix = "";
         if (isXLAT) {
             ipv4Prefix = "v4-";
         }
 
         if (!lastNetwork.equals("")) {
-            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv6Prefix, lastIPv6, fixTTL, dnsmasq);
+            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
         }
 
         natApplied = false;

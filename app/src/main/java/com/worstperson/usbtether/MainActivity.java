@@ -142,6 +142,7 @@ public class MainActivity extends AppCompatActivity {
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
         EditText ipv4_text = findViewById(R.id.ipv4_text);
         EditText wg_text = findViewById(R.id.wg_text);
+        EditText bandwidth_text = findViewById(R.id.bandwidth_text);
         LinearLayout prefix_layout = findViewById(R.id.prefix_layout);
         LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
 
@@ -168,6 +169,7 @@ public class MainActivity extends AppCompatActivity {
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+        String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
 
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
@@ -175,6 +177,7 @@ public class MainActivity extends AppCompatActivity {
 
         ipv4_text.setText(ipv4Addr);
         wg_text.setText(wireguardProfile);
+        bandwidth_text.setText(clientBandwidth);
 
         setInterfaceSpinner(tetherInterface, interface_spinner);
 
@@ -217,6 +220,7 @@ public class MainActivity extends AppCompatActivity {
             ttl_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
+            bandwidth_text.setEnabled(false);
             interface_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
@@ -238,6 +242,7 @@ public class MainActivity extends AppCompatActivity {
             ttl_switch.setEnabled(!isChecked);
             ipv4_text.setEnabled(!isChecked);
             wg_text.setEnabled(!isChecked);
+            bandwidth_text.setEnabled(!isChecked);
             if (autostartVPN == 0) {
                 interface_spinner.setEnabled(!isChecked);
             }
@@ -390,6 +395,24 @@ public class MainActivity extends AppCompatActivity {
                     }
                     edit.apply();
                     return false;
+                }
+
+                return true;
+            }
+        });
+
+        bandwidth_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    Pattern sPattern = Pattern.compile("^[0-9]+$");
+                    if (sPattern.matcher(String.valueOf(bandwidth_text.getText())).matches()) {
+                        SharedPreferences.Editor edit = sharedPref.edit();
+                        edit.putString("clientBandwidth", String.valueOf(bandwidth_text.getText()));
+                        edit.apply();
+                        return false;
+                    }
                 }
 
                 return true;

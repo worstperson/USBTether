@@ -251,4 +251,29 @@
             android:maxLines="1" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/bandwidth_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/wgp_layout"
+        android:layout_marginLeft="20pt"
+        android:layout_marginRight="20pt"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Max Client Bandwidth (kBps):"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+        <EditText
+            android:id="@+id/bandwidth_text"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1" />
+    </LinearLayout>
+
 </RelativeLayout>

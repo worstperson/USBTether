@@ -110,7 +110,7 @@ public class Script {
         }
     }
 
-    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData) {
+    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
@@ -126,10 +126,16 @@ public class Script {
                     shellCommand("ip6tables -t mangle -A FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
             }
+            String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+            if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per connection
+                shellCommand("iptables -A FORWARD -i " + ipv4Interface + " -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+                if (ipv6Masquerading || ipv6SNAT) {
+                    shellCommand("ip6tables -A FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+                }
+            }
             if (dnsmasq) {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
-                String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 if (ipv6Masquerading || ipv6SNAT) {
                     shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
@@ -153,12 +159,19 @@ public class Script {
         return false;
     }
 
-    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq) {
+    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
         if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
+
+            if (Integer.parseInt(clientBandwidth) > 0) {
+                String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+                shellCommand("iptables -D FORWARD -i " + ipv4Interface + " -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+                shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+            }
+
             if (fixTTL) {
                 shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
                 shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
@@ -193,6 +206,10 @@ public class Script {
             shellCommand("ndc interface clearaddrs rndis0");
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
+
+            shellCommand("iptables -D FORWARD -i " + ipv4Interface + " -o rndis0 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above 200kb/s --hashlimit-name TetherBandwidth -j DROP");
+            shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above 200kb/s --hashlimit-name TetherBandwidth -j DROP");
+
             if (!softReset) {
                 Shell.su("setprop sys.usb.config \"adb\"").exec();
             }
