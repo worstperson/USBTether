@@ -116,6 +116,7 @@ public class Script {
             Log.w("usbtether", "Aborting tether...");
             Shell.su("setprop sys.usb.config \"adb\"").exec();
             Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
+            Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
             return false;
         } else {
             enable_ip_forwarding();
@@ -127,7 +128,7 @@ public class Script {
                 }
             }
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-            if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per connection
+            if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per IP address
                 shellCommand("iptables -A FORWARD -i " + ipv4Interface + " -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
                 if (ipv6Masquerading || ipv6SNAT) {
                     shellCommand("ip6tables -A FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
@@ -206,7 +207,7 @@ public class Script {
             shellCommand("ndc interface clearaddrs rndis0");
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
-            
+
             if (!softReset) {
                 Shell.su("setprop sys.usb.config \"adb\"").exec();
             }
