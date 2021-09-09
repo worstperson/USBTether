@@ -206,10 +206,7 @@ public class Script {
             shellCommand("ndc interface clearaddrs rndis0");
             shellCommand("ndc interface setcfg rndis0 down");
             shellCommand("ndc ipfwd disable tethering");
-
-            shellCommand("iptables -D FORWARD -i " + ipv4Interface + " -o rndis0 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above 200kb/s --hashlimit-name TetherBandwidth -j DROP");
-            shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above 200kb/s --hashlimit-name TetherBandwidth -j DROP");
-
+            
             if (!softReset) {
                 Shell.su("setprop sys.usb.config \"adb\"").exec();
             }
