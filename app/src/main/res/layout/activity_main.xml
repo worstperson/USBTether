@@ -40,240 +40,259 @@
         android:layout_marginBottom="5pt"
         android:background="@android:color/darker_gray" />
 
-    <LinearLayout
-        android:id="@+id/service_layout"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/line"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Enable Service:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Switch
-            android:id="@+id/service_switch"
+        android:layout_height="match_parent"
+        android:layout_below="@id/line" >
+
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="false" />
-    </LinearLayout>
+            android:layout_height="wrap_content">
 
-    <LinearLayout
-        android:id="@+id/interface_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/service_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Tether Interface:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Spinner
-            android:id="@+id/interface_spinner"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/service_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Enable Service:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Switch
+                    android:id="@+id/service_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/dnsmasq_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/interface_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Enable Dnsmasq:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Switch
-            android:id="@+id/dnsmasq_switch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="false" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/interface_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/service_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Tether Interface:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Spinner
+                    android:id="@+id/interface_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/ip4_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/dnsmasq_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginRight="20pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="IPv4 Address:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <EditText
-            android:id="@+id/ipv4_text"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:imeOptions="actionDone"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:maxLines="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/dnsmasq_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/interface_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Enable Dnsmasq:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Switch
+                    android:id="@+id/dnsmasq_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/nat_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/ip4_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="IPv6 NAT:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Spinner
-            android:id="@+id/nat_spinner"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/ip4_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/dnsmasq_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginRight="20pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="IPv4 Address:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <EditText
+                    android:id="@+id/ipv4_text"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:imeOptions="actionDone"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/prefix_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/nat_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="IPv6 Prefix:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Spinner
-            android:id="@+id/prefix_spinner"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/nat_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/ip4_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="IPv6 NAT:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Spinner
+                    android:id="@+id/nat_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/ttl_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/prefix_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Modify TTL/HL:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Switch
-            android:id="@+id/ttl_switch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="false" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/prefix_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/nat_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="IPv6 Prefix:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Spinner
+                    android:id="@+id/prefix_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/vpn_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/ttl_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginTop="5pt"
-        android:layout_marginRight="20pt"
-        android:layout_marginBottom="5pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Autostart VPN:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <Spinner
-            android:id="@+id/vpn_spinner"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/ttl_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/prefix_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Modify TTL/HL:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Switch
+                    android:id="@+id/ttl_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/wgp_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/vpn_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginRight="20pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="WireGuard Profile:"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <EditText
-            android:id="@+id/wg_text"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:imeOptions="actionDone"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:maxLines="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/vpn_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/ttl_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Autostart VPN:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Spinner
+                    android:id="@+id/vpn_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
+            </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/bandwidth_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/wgp_layout"
-        android:layout_marginLeft="20pt"
-        android:layout_marginRight="20pt"
-        android:orientation="horizontal">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="Max Client Bandwidth (kBps):"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
-        <EditText
-            android:id="@+id/bandwidth_text"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:imeOptions="actionDone"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:maxLines="1" />
-    </LinearLayout>
+            <LinearLayout
+                android:id="@+id/wgp_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/vpn_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginRight="20pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="WireGuard Profile:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <EditText
+                    android:id="@+id/wg_text"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:imeOptions="actionDone"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/bandwidth_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/wgp_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginRight="20pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Max Client \n Bandwidth (kBps):"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <EditText
+                    android:id="@+id/bandwidth_text"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:imeOptions="actionDone"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+        </RelativeLayout>
+
+    </ScrollView>
 
 </RelativeLayout>
