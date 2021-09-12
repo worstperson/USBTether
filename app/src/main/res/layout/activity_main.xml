@@ -131,7 +131,8 @@
                     android:layout_height="match_parent"
                     android:gravity="center"
                     android:text="IPv4 Address:"
-                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                    android:textAppearance="?android:attr/textAppearanceMedium"
+                    android:layout_marginEnd="20dp" />
                 <EditText
                     android:id="@+id/ipv4_text"
                     android:layout_width="0dp"
@@ -252,7 +253,8 @@
                     android:layout_height="match_parent"
                     android:gravity="center"
                     android:text="WireGuard Profile:"
-                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                    android:textAppearance="?android:attr/textAppearanceMedium"
+                    android:layout_marginEnd="20dp" />
                 <EditText
                     android:id="@+id/wg_text"
                     android:layout_width="0dp"
@@ -278,7 +280,8 @@
                     android:layout_height="match_parent"
                     android:gravity="center"
                     android:text="Max Client \n Bandwidth (kBps):"
-                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                    android:textAppearance="?android:attr/textAppearanceMedium"
+                    android:layout_marginEnd="20dp" />
                 <EditText
                     android:id="@+id/bandwidth_text"
                     android:layout_width="0dp"
