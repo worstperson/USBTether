@@ -146,6 +146,7 @@ public class ForegroundService extends Service {
             Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
             Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
             Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+            boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
             Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
             String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
             String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
@@ -193,7 +194,7 @@ public class ForegroundService extends Service {
                         Log.w("usbtether", "Starting tether operation...");
                     } else {
                         Log.w("usbtether", "Network changed, resetting interface...");
-                        Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
+                        Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
                         natApplied = false;
                     }
                     if (waitInterface(currentInterface)) {
@@ -217,12 +218,14 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth);
+                        natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention);
                         if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                             Log.w("usbtether", "Failed configuring tether, resetting interface...");
-                            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
+                            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
                             natApplied = false;
                             Script.configureRNDIS();
+                        } else if (dpiCircumvention) {
+                            Script.startTPWS(ipv4Addr, ipv6Prefix, getFilesDir().getPath());
                         }
                     } else {
                         Log.w("usbtether", "Failed, tether interface unavailable");
@@ -239,11 +242,15 @@ public class ForegroundService extends Service {
                                 edit.putString("lastIPv6", newAddr);
                                 edit.apply();
                             }
-                            if (usbReconnect && !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
-                                Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
-                                Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
-                                natApplied = false;
-                                Script.configureRNDIS();
+                            if (usbReconnect) {
+                                if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                                    Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
+                                    Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
+                                    natApplied = false;
+                                    Script.configureRNDIS();
+                                } else if (dpiCircumvention) {
+                                    Script.startTPWS(ipv4Addr, ipv6Prefix, getFilesDir().getPath());
+                                }
                             } else {
                                 // Brings tether back up on connection change
                                 Script.forwardInterface(ipv4Prefix + currentInterface, currentInterface);
@@ -366,6 +373,7 @@ public class ForegroundService extends Service {
         Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
@@ -377,7 +385,7 @@ public class ForegroundService extends Service {
         }
 
         if (!lastNetwork.equals("")) {
-            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth);
+            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
         }
 
         natApplied = false;

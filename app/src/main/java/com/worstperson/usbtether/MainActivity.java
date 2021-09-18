@@ -148,10 +148,47 @@ public class MainActivity extends AppCompatActivity {
         }
         file.setExecutable(true);
 
+        file = new File(getFilesDir().getPath() + "/tpws.armeabi-v7a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.tpws_arm)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/tpws.arm64-v8a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.tpws_arm64)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
         TextView net_textview = findViewById(R.id.net_textview);
         Switch service_switch = findViewById(R.id.service_switch);
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
         Switch ttl_switch = findViewById(R.id.ttl_switch);
+        Switch dpi_switch = findViewById(R.id.dpi_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
@@ -181,6 +218,7 @@ public class MainActivity extends AppCompatActivity {
         boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
+        boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
@@ -190,6 +228,7 @@ public class MainActivity extends AppCompatActivity {
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
         ttl_switch.setChecked(fixTTL);
+        dpi_switch.setChecked(dpiCircumvention);
 
         ipv4_text.setText(ipv4Addr);
         wg_text.setText(wireguardProfile);
@@ -234,6 +273,7 @@ public class MainActivity extends AppCompatActivity {
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
+            dpi_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -256,6 +296,7 @@ public class MainActivity extends AppCompatActivity {
         service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             dnsmasq_switch.setEnabled(!isChecked);
             ttl_switch.setEnabled(!isChecked);
+            dpi_switch.setEnabled(!isChecked);
             ipv4_text.setEnabled(!isChecked);
             wg_text.setEnabled(!isChecked);
             bandwidth_text.setEnabled(!isChecked);
@@ -289,6 +330,12 @@ public class MainActivity extends AppCompatActivity {
         ttl_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             SharedPreferences.Editor edit = sharedPref.edit();
             edit.putBoolean("fixTTL", isChecked);
+            edit.apply();
+        });
+
+        dpi_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            SharedPreferences.Editor edit = sharedPref.edit();
+            edit.putBoolean("dpiCircumvention", isChecked);
             edit.apply();
         });
 

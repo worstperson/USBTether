@@ -59,7 +59,7 @@ USB Tether can still be used to tether IPv4 traffic. Wifi and VPN tethers will w
 
 #### Why does IPv6 require NAT support?
 
-Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. It is theorized that standard IPv6 tethering cannot be hidden because every device is addressed individually in the tunnel.
+Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. Standard IPv6 tethering has every device is addressed individually in the tunnel and requires a double NAT to modify hoplimit from my testing.
 
 #### Can carriers detect this?
 
@@ -67,7 +67,7 @@ Hiding devices behind NATs and setting the TTL/HL goes a long way towards avoidi
 
 ## Router Setup:
 
-These setups typically use the phone as the router bridged to a consumer router configured as a wireless AP to avoid double NAT. Try to avoid any Broadcomm MIPS routers as their USB support is very poor. Something like a RPi should be used as a bridge device when tethering with an otherwise unsuitable router. OpenWRT devices are highly recommended, Qualcomm IPQ Linksys routers go for pretty cheap and are well suited to this task. OpenWRT makes it possible to run the DHCP server on the router and offers many other powerful resources for managing your network.
+These setups typically use the phone as the router bridged to a consumer router configured as a wireless AP to avoid double NAT. Try to avoid any Broadcom MIPS routers as their USB support is very poor. Something like a RPi should be used as a bridge device when tethering with an otherwise unsuitable router. OpenWRT devices are highly recommended, Qualcomm IPQ Linksys routers go for pretty cheap and are well suited to this task. OpenWRT makes it possible to run the DHCP server on the router and offers many other powerful resources for managing your network.
 
 You must also be prepaired for testing and problem solving software/hardware quirks. As an example, on my EA6350v3 I had to:
 
@@ -85,8 +85,8 @@ Requires kernel RNDIS support:
     
 Settings as of 19.07 (router handles DHCP and uses ULA prefix):
 
-    **Network** -> **Interfaces** -> **LAN** 
-    -> **General Settings**
+    Network -> Interfaces -> LAN
+    -> General Settings
     Protocol: Static Address
     IPv4 address: 192.168.42.1
     IPv4 netmask: 255.255.255.0
@@ -95,22 +95,22 @@ Settings as of 19.07 (router handles DHCP and uses ULA prefix):
     IPv6 address: fd00::2/64
     IPv6 gateway: fd00::1
     IPv6 routed prefix: fd00::/64
-    -> **Physical Settings**
+    -> Physical Settings
     Interface: add usb0
-    -> **DHCP Server**
-    --> **General Setup**
+    -> DHCP Server
+    --> General Setup
     Start: 100
     Limit: 150
-    -->**Advanced Settings**
+    -->Advanced Settings
     Force: enabled
-    --> **IPv6 Settings**
+    --> IPv6 Settings
     Always announce default router: enabled
 
 Be sure to set your preferred DNS servers as appropriate:
 
-    **Network** -> **Interfaces** -> **LAN** -> **General Settings** -> Use custom DNS servers
-    **Network** -> **Interfaces** -> **LAN** -> **DHCP Server** -> **IPv6 Settings** -> Announced DNS servers
-    **DHCP and DNS** -> **General Settings** -> DNS forwardings
+    Network -> Interfaces -> LAN -> General Settings -> Use custom DNS servers
+    Network -> Interfaces -> LAN -> DHCP Server -> IPv6 Settings -> Announced DNS servers
+    DHCP and DNS -> General Settings -> DNS forwardings
 
 ## TODO:
 

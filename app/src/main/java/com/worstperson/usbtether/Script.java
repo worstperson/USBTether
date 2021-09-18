@@ -114,6 +114,7 @@ public class Script {
             } else {
                 shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
             }
+
         }
     }
 
@@ -126,7 +127,7 @@ public class Script {
         }
     }
 
-    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth) {
+    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
@@ -159,6 +160,12 @@ public class Script {
                     shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 --dhcp-option-force=43,ANDROID_METERED --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
+            if (dpiCircumvention) {
+                shellCommand("iptables -t nat -I PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
+                shellCommand("iptables -t nat -I PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+                shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+            }
         }
         return true;
     }
@@ -176,13 +183,27 @@ public class Script {
         return false;
     }
 
-    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth) {
+    static void startTPWS(String ipv4Addr, String ipv6Prefix, String appData) {
+        shellCommand("killall tpws." + Build.SUPPORTED_ABIS[0]);
+        //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
+        shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --split-pos=3 --uid 1:3003 &");
+    }
+
+    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
+
+        if (dpiCircumvention) {
+            shellCommand("killall tpws." + Build.SUPPORTED_ABIS[0]);
+            shellCommand("iptables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
+            shellCommand("iptables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+            shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+            shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+        }
+
         if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
-
             if (Integer.parseInt(clientBandwidth) > 0) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 shellCommand("iptables -D FORWARD -i " + ipv4Interface + "  -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
