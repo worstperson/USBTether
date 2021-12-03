@@ -10,6 +10,7 @@ USB Tether is an application to automatically manage and maintain a tethered con
  - IPv6 NAT supporting both Masquerading and SNAT
  - IPv6 Prefix selection to set IPv6 priority
  - TTL/HL modification to make all packets look like they came from your device
+ - DPI Circumvention for bypassing traffic throttling
  - VPN Autostart support to ensure your VPN stays connected
  - IP-based bandwidth control to help manage larger networks
 
@@ -49,7 +50,7 @@ I think it's possible, but would require framework patches to get signature-leve
 
 #### What if I have a locked down phone?
 
-There are a bunch of paid apps that tunnel data through adb, but they all all have their downsides. Running a Shadowsocks server ideally through a tether or alternatively tunneled through adb to a router would work well. There are also a few socks proxies written in Go that would probably be easy to port. The most difficult roadblock is UDP support, otherwise any proxy would do.
+There are a bunch of paid apps that tunnel data through adb, but they all have their downsides. Running a Shadowsocks server ideally through a tether or alternatively tunneled through adb to a router would work well. There are also a few socks proxies written in Go that would probably be easy to port. The most difficult roadblock is UDP support, otherwise any proxy would do.
 
 #### What if I can't build the kernel modules mentioned?
 
@@ -63,7 +64,7 @@ Using NAT allows us to tether to any interface, modify traffic as it passes, and
 
 #### Can carriers detect this?
 
-Hiding devices behind NATs and setting the TTL/HL goes a long way towards avoiding being easily flagged, but does nothing to hide packet structure or your activity. Carriers in the USA already collect this information to sell off and could easily use it to boot troublesome users for ToS violation. A remote VPN is highly recommended and has the added benefit avoiding throttling and peering issues, while at the same time, long-running VPN tunnels are a prime target for throttling themselves.
+Hiding devices behind NATs and setting the TTL/HL goes a long way towards avoiding being easily flagged, but does nothing to hide packet structure or your activity. A remote VPN is highly recommended and has the added benefit avoiding throttling and peering issues, while at the same time, long-running VPN tunnels are a prime target for throttling themselves.
 
 ## Router Setup:
 
@@ -119,3 +120,9 @@ Be sure to set your preferred DNS servers as appropriate:
  - **Traffic Shaping** - Using the firewall to limit bandwidth works well enough, but it would be nice to have QoS via tc as an option too. QoS can be ran on the bridge as well and is preferred.
  - **DNSMasq Watchdog** - We should have a process that watches over DNSMasq and restarts it when killed.
  - **VPN Watchdog** - We should have a periodic check that traffic can pass the tunnel and restart it if it can't.
+ - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
+
+## DEPENDENCIES:
+
+ - dnsmasq - https://github.com/worstperson/dnsmasq
+ - tpws - https://github.com/bol-van/zapret
