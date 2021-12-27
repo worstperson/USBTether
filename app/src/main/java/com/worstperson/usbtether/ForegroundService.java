@@ -30,7 +30,9 @@ import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
@@ -57,6 +59,14 @@ public class ForegroundService extends Service {
     private boolean needsReset = false;
     private boolean usbReconnect = false;
     private boolean usbState = false;
+
+    final Handler handler = new Handler(Looper.getMainLooper());
+    Runnable delayedRestore = new Runnable() {
+        @Override
+        public void run() {
+            restoreTether();
+        }
+    };
 
     private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
@@ -136,9 +146,8 @@ public class ForegroundService extends Service {
 
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
     // FIXME - FEATURE - disable IPv6 when MTU is lower than spec allows
-    //  (AT&T Cricket has broken IPv6, MTU is set to the minimum for IPv4, don't use it)
-    private void restoreTether(boolean isConnected) {
-        if (isConnected) {
+    private void restoreTether() {
+        if (usbState) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -173,7 +182,7 @@ public class ForegroundService extends Service {
 
             // Restart VPN if needed
             if (autostartVPN > 0 && !isUp) {
-                Log.w("usbtether", "VPN down, restarting...");
+                Log.i("usbtether", "VPN down, restarting...");
                 startVPN(autostartVPN, wireguardProfile, currentInterface);
                 if (natApplied) {
                     needsReset = true;
@@ -191,9 +200,9 @@ public class ForegroundService extends Service {
             if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
                 if (!natApplied || (natApplied && tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork))) { // Configure Tether
                     if (!natApplied) {
-                        Log.w("usbtether", "Starting tether operation...");
+                        Log.i("usbtether", "Starting tether operation...");
                     } else {
-                        Log.w("usbtether", "Network changed, resetting interface...");
+                        Log.i("usbtether", "Network changed, resetting interface...");
                         Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
                         natApplied = false;
                     }
@@ -233,7 +242,7 @@ public class ForegroundService extends Service {
                 } else { // Restore Tether
                     if (isUp) {
                         if (needsReset) {
-                            Log.w("usbtether", "Restoring tether...");
+                            Log.i("usbtether", "Restoring tether...");
                             // Update SNAT if needed
                             String newAddr = setupSNAT(currentInterface, ipv6SNAT);
                             if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
@@ -267,6 +276,7 @@ public class ForegroundService extends Service {
                 }
             } else {
                 Log.w("usbtether", "Tether failed, invalid interface");
+                needsReset = true;
             }
         } else {
             Log.i("usbtether", "USB not connected");
@@ -284,12 +294,22 @@ public class ForegroundService extends Service {
                 Log.i("usbtether", "USB Connected");
                 if (intent.getExtras().getBoolean("configured")) {
                     Log.i("usbtether", "USB Configured");
-                    if (natApplied) {
-                        // Fix for Google One VPN
-                        needsReset = true;
+                    if (!handler.hasCallbacks(delayedRestore)) {
+                        usbState = true;
+                        if (natApplied) {
+                            // Fix for Google One VPN
+                            needsReset = true;
+                        }
+                        if (natApplied && !usbReconnect) {
+                            // Restore right away if there was no disconnect event
+                            restoreTether();
+                        } else {
+                            Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
+                            handler.postDelayed(delayedRestore, 5000);
+                        }
+                    } else {
+                        Log.i("usbtether", "Tether restore callback already scheduled");
                     }
-                    usbState = true;
-                    restoreTether(true);
                 } else {
                     Log.i("usbtether", "USB Not Configured");
                 }
@@ -300,6 +320,10 @@ public class ForegroundService extends Service {
                     usbReconnect = true;
                 }
                 usbState = false;
+                if (handler.hasCallbacks(delayedRestore)) {
+                    Log.i("usbtether", "USB Disconnected, removing tether restore callback");
+                    handler.removeCallbacks(delayedRestore);
+                }
             }
         }
     };
@@ -311,7 +335,11 @@ public class ForegroundService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.i("usbtether", "Recieved CONNECTIVITY_CHANGE broadcast");
-            restoreTether(usbState);
+            if (!handler.hasCallbacks(delayedRestore)) {
+                restoreTether();
+            } else {
+                Log.i("usbtether", "Skipping event due to pending callback");
+            }
         }
     };
 
