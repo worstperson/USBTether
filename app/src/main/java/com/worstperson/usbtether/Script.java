@@ -20,9 +20,12 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
-import java.util.List;
-
 public class Script {
+
+    // Since Android 8, init scripts for controlling usb state have been deprecated. State is now
+    // controlled by a bit of java code exposed to the USB service. On the Pixel 4a 5G, Google removed
+    // the deprecated init script entirely, so we need to manually control the state for now.
+    static boolean brambleHack = false;
 
     static {
         Shell.enableVerboseLogging = BuildConfig.DEBUG;
@@ -118,22 +121,37 @@ public class Script {
         }
     }
 
+    // TODO - figure out how to interact with the usb service as this legacy approach is dead. Restoring
+    //        init scripts or supporting each driver individually would not be ideal.
     static void configureRNDIS() {
         if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
             Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
-            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done").exec();
+            if (brambleHack) {
+                shellCommand("echo \"0x18d1\" > /config/usb_gadget/g1/idVendor");
+                shellCommand("echo \"0x4ee4\" > /config/usb_gadget/g1/idProduct");
+                shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
+                shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
+            } else {
+                Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done").exec();
+            }
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
+
     }
 
     static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
-            Shell.su("setprop sys.usb.config \"adb\"").exec();
-            Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
-            Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
+            if (brambleHack) {
+                shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
+                shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
+            } else {
+                Shell.su("setprop sys.usb.config \"adb\"").exec();
+                Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
+                Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
+            }
             return false;
         } else {
             enable_ip_forwarding();
@@ -202,7 +220,8 @@ public class Script {
             shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
         }
 
-        if ( Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
+        if ( (brambleHack && Shell.su("[ \"$(getprop sys.usb.config)\" = \"rndis,adb\" ]").exec().isSuccess())
+                || Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess()) {
             Log.i("USBTether", "Restoring tether interface state");
             if (Integer.parseInt(clientBandwidth) > 0) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
@@ -247,6 +266,9 @@ public class Script {
 
             if (!softReset) {
                 Shell.su("setprop sys.usb.config \"adb\"").exec();
+                if (brambleHack) {
+                    shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
+                }
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");
