@@ -40,10 +40,17 @@ public class Script {
         }
     }
 
+    static void unforwardInterface(String ipv4Interface, String ipv6Interface) {
+        shellCommand("ndc ipfwd remove rndis0 " + ipv6Interface);
+        if (!ipv6Interface.equals(ipv4Interface)) {
+            shellCommand("ndc ipfwd remove rndis0 " + ipv4Interface);
+        }
+    }
+
     static void forwardInterface(String ipv4Interface, String ipv6Interface) {
-        shellCommand("ndc ipfwd add rndis0 " + ipv4Interface);
-        if (!ipv4Interface.equals(ipv6Interface)) { // this check is not needed
-            shellCommand("ndc ipfwd add rndis0 " + ipv6Interface);
+        shellCommand("ndc ipfwd add rndis0 " + ipv6Interface);
+        if (!ipv6Interface.equals(ipv4Interface)) {
+            shellCommand("ndc ipfwd add rndis0 " + ipv4Interface);
         }
     }
 
@@ -57,7 +64,7 @@ public class Script {
         shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 5; waitTime++) {
-            if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
+            if (Shell.su("[[ \"$(cat /sys/class/net/rndis0/operstate)\" == \"up\" ]]").exec().isSuccess()) {
                 break;
             }
             Log.i("USBTether", "waiting... " + waitTime);
@@ -72,12 +79,21 @@ public class Script {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
+        if (Shell.su("[[ \"$(cat /sys/class/net/rndis0/operstate)\" == \"up\" ]]").exec().isSuccess()) {
             shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
             return true;
         } else {
             return false;
         }
+    }
+
+    static void remove_marked_routes(String ipv4Addr, String ipv6Prefix) {
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        Log.i("USBTether", "Removing marked routes");
+        shellCommand("ndc network route remove 99 rndis0 " + ipv4Prefix + ".0/24");
+        shellCommand("ndc network route remove 99 rndis0 " + ipv6Prefix + "/64");
+        shellCommand("ndc network route remove 99 rndis0 fe80::/64");
+        shellCommand("ndc network interface remove 99 rndis0");;
     }
 
     static void add_marked_routes(String ipv4Addr, String ipv6Prefix) {
@@ -121,18 +137,22 @@ public class Script {
         }
     }
 
+    static boolean isRNDIS() {
+        return Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess();
+    }
+
     // TODO - figure out how to interact with the usb service as this legacy approach is dead. Restoring
     //        init scripts or supporting each driver individually would not be ideal.
     static void configureRNDIS() {
-        if ( !Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess() ) {
-            Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
+        if ( !Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess() ) {
+            Shell.su("setprop sys.usb.config rndis,adb").exec();
             if (brambleHack) {
                 shellCommand("echo \"0x18d1\" > /config/usb_gadget/g1/idVendor");
                 shellCommand("echo \"0x4ee4\" > /config/usb_gadget/g1/idProduct");
                 shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
                 shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
             } else {
-                Shell.su("until [ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]; do sleep 1; done").exec();
+                Shell.su("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done").exec();
             }
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
@@ -148,9 +168,9 @@ public class Script {
                 shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
                 shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
             } else {
-                Shell.su("setprop sys.usb.config \"adb\"").exec();
-                Shell.su("until [ \"$(getprop sys.usb.state)\" = \"adb\" ]; do sleep 1; done").exec();
-                Shell.su("setprop sys.usb.config \"rndis,adb\"").exec();
+                Shell.su("setprop sys.usb.config adb").exec();
+                Shell.su("until [[ \"$(getprop sys.usb.state)\" != *\"rndis\"* ]]; do sleep 1; done").exec();
+                Shell.su("setprop sys.usb.config rndis,adb").exec();
             }
             return false;
         } else {
@@ -188,6 +208,14 @@ public class Script {
         return true;
     }
 
+    static void unconfigureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
+        unforwardInterface(ipv4Interface, ipv6Interface);
+        shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
+        shellCommand("ndc interface clearaddrs rndis0");
+        shellCommand("ndc interface setcfg rndis0 down");
+        remove_marked_routes(ipv4Addr, ipv6Prefix);
+    }
+
     static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
@@ -220,11 +248,11 @@ public class Script {
             shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
         }
 
-        if ( (brambleHack && Shell.su("[ \"$(getprop sys.usb.config)\" = \"rndis,adb\" ]").exec().isSuccess())
-                || Shell.su("[ \"$(getprop sys.usb.state)\" = \"rndis,adb\" ]").exec().isSuccess()) {
+        if ( (brambleHack && Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess())
+                || Shell.su("[[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]").exec().isSuccess()) {
             Log.i("USBTether", "Restoring tether interface state");
+            String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) {
-                String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 shellCommand("iptables -D FORWARD -i " + ipv4Interface + "  -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
                 shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
             }
@@ -258,6 +286,9 @@ public class Script {
                 shellCommand("ndc ipfwd remove rndis0 " + ipv4Interface);
             }
             shellCommand("ndc nat disable rndis0 " + ipv4Interface + " 99");
+            shellCommand("ndc network route remove 99 rndis0 " + ipv4Prefix + ".0/24");
+            shellCommand("ndc network route remove 99 rndis0 " + ipv6Prefix + "/64");
+            shellCommand("ndc network route remove 99 rndis0 fe80::/64");
             shellCommand("ndc network interface remove 99 rndis0");
             shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
             shellCommand("ndc interface clearaddrs rndis0");
@@ -265,7 +296,7 @@ public class Script {
             shellCommand("ndc ipfwd disable tethering");
 
             if (!softReset) {
-                Shell.su("setprop sys.usb.config \"adb\"").exec();
+                Shell.su("setprop sys.usb.config adb").exec();
                 if (brambleHack) {
                     shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
                 }
@@ -286,7 +317,7 @@ public class Script {
     }
 
     static Boolean testConnection(String tetherInterface) {
-        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess() || Shell.su("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " is online");
             return true;
         }
