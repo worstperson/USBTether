@@ -440,6 +440,10 @@ public class ForegroundService extends Service {
         unregisterReceiver(USBReceiver);
         unregisterReceiver(ConnectionReceiver);
 
+        if (handler.hasCallbacks(delayedRestore)) {
+            handler.removeCallbacks(delayedRestore);
+        }
+
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
         String lastIPv6 = sharedPref.getString("lastIPv6", "");

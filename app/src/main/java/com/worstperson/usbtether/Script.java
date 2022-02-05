@@ -20,12 +20,9 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
-public class Script {
+import java.util.List;
 
-    // Since Android 8, init scripts for controlling usb state have been deprecated. State is now
-    // controlled by a bit of java code exposed to the USB service. On the Pixel 4a 5G, Google removed
-    // the deprecated init script entirely, so we need to manually control the state for now.
-    static boolean brambleHack = false;
+public class Script {
 
     static {
         Shell.enableVerboseLogging = BuildConfig.DEBUG;
@@ -38,6 +35,38 @@ public class Script {
         for (String message : Shell.su(command).exec().getOut()) {
             Log.i("USBTether", message);
         }
+    }
+
+    // FIXME - What if there are multiple gadgets?
+    static String gadgetPath() {
+        Shell.Result command = Shell.su("find /config/usb_gadget/* -type d -maxdepth 0").exec();
+        if ( command.isSuccess() ) {
+            for (String result : command.getOut()) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    static String configPath() {
+        Shell.Result command = Shell.su("find /config/usb_gadget/*/c*/* -type d -maxdepth 0").exec();
+        if ( command.isSuccess() ) {
+            for (String result : command.getOut()) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    // FIXME - NEED TO ADD A TEST!!!
+    static String functionPath() {
+        Shell.Result command = Shell.su("find /config/usb_gadget/*/f*/*.rndis -type d -maxdepth 0").exec();
+        if ( command.isSuccess() ) {
+            for (String result : command.getOut()) {
+                return result;
+            }
+        }
+        return null;
     }
 
     static void unforwardInterface(String ipv4Interface, String ipv6Interface) {
@@ -64,7 +93,7 @@ public class Script {
         shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 5; waitTime++) {
-            if (Shell.su("[[ \"$(cat /sys/class/net/rndis0/operstate)\" == \"up\" ]]").exec().isSuccess()) {
+            if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
                 break;
             }
             Log.i("USBTether", "waiting... " + waitTime);
@@ -79,7 +108,7 @@ public class Script {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        if (Shell.su("[[ \"$(cat /sys/class/net/rndis0/operstate)\" == \"up\" ]]").exec().isSuccess()) {
+        if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
             shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
             return true;
         } else {
@@ -138,22 +167,19 @@ public class Script {
     }
 
     static boolean isRNDIS() {
-        return Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess();
+        return Shell.su("[[ \"$(getprop sys.usb.usbtether)\" == \"true\" ]]").exec().isSuccess();
     }
 
-    // TODO - figure out how to interact with the usb service as this legacy approach is dead. Restoring
-    //        init scripts or supporting each driver individually would not be ideal.
     static void configureRNDIS() {
-        if ( !Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess() ) {
-            Shell.su("setprop sys.usb.config rndis,adb").exec();
-            if (brambleHack) {
-                shellCommand("echo \"0x18d1\" > /config/usb_gadget/g1/idVendor");
-                shellCommand("echo \"0x4ee4\" > /config/usb_gadget/g1/idProduct");
-                shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
-                shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
-            } else {
-                Shell.su("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done").exec();
-            }
+        if ( !Shell.su("[[ \"$(getprop sys.usb.usbtether)\" == \"true\" ]]").exec().isSuccess() ) {
+            shellCommand("echo \"0x18d1\" > " + gadgetPath() + "/idVendor");
+            shellCommand("echo \"0x4ee4\" > " + gadgetPath() + "/idProduct");
+            shellCommand("rm -r " + configPath() + "/usbtether");
+            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
+            //Do it again?
+            shellCommand("rm -r " + configPath() + "/usbtether");
+            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
+            Shell.su("setprop sys.usb.usbtether true").exec();
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
@@ -164,14 +190,8 @@ public class Script {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
-            if (brambleHack) {
-                shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
-                shellCommand("ln -s /config/usb_gadget/g1/functions/gsi.rndis /config/usb_gadget/g1/configs/b.1/function1");
-            } else {
-                Shell.su("setprop sys.usb.config adb").exec();
-                Shell.su("until [[ \"$(getprop sys.usb.state)\" != *\"rndis\"* ]]; do sleep 1; done").exec();
-                Shell.su("setprop sys.usb.config rndis,adb").exec();
-            }
+            shellCommand("rm -r " + configPath() + "/usbtether");
+            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
             return false;
         } else {
             enable_ip_forwarding();
@@ -248,8 +268,7 @@ public class Script {
             shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
         }
 
-        if ( (brambleHack && Shell.su("[[ \"$(getprop sys.usb.config)\" == *\"rndis\"* ]]").exec().isSuccess())
-                || Shell.su("[[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]").exec().isSuccess()) {
+        if ( Shell.su("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) {
@@ -296,10 +315,8 @@ public class Script {
             shellCommand("ndc ipfwd disable tethering");
 
             if (!softReset) {
-                Shell.su("setprop sys.usb.config adb").exec();
-                if (brambleHack) {
-                    shellCommand("rm -r /config/usb_gadget/g1/configs/b.1/function1");
-                }
+                Shell.su("setprop sys.usb.usbtether false").exec();
+                shellCommand("rm -r " + configPath() + "/usbtether");
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");
