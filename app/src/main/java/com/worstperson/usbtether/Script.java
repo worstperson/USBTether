@@ -37,36 +37,42 @@ public class Script {
         }
     }
 
-    // FIXME - What if there are multiple gadgets?
-    static String gadgetPath() {
+    static boolean isUSBConfigured() {
+        if (Shell.su("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess()) {
+            return true;
+        }
+        return false;
+    }
+
+    static String[] gadgetVars() {
+        String[] result = { null, null, null };
         Shell.Result command = Shell.su("find /config/usb_gadget/* -type d -maxdepth 0").exec();
         if ( command.isSuccess() ) {
-            for (String result : command.getOut()) {
-                return result;
+            for (String result1 : command.getOut()) {
+                result[0] = result1;
+                if (Shell.su("[ \"$(cat " + result[0] + "/UDC )\" = \"$(getprop sys.usb.controller)\" ]").exec().isSuccess()) {
+                    Shell.Result command2 = Shell.su("find " + result[0] + "/c*/* -type d -maxdepth 0").exec();
+                    if ( command2.isSuccess() ) {
+                        for (String result2 : command2.getOut()) {
+                            result[1] = result2;
+                            break;
+                        }
+                    }
+                    command2 = Shell.su("find " + result[0] + "/f*/*.rndis -type d -maxdepth 0").exec();
+                    if ( command2.isSuccess() ) {
+                        for (String result2 : command2.getOut()) {
+                            // FIXME - NEED TO ADD A TEST!!!
+                            result[2] = result2;
+                            break;
+                        }
+                    }
+                    if (result[0] != null && result[1] != null && result[2] != null) {
+                        break;
+                    }
+                }
             }
         }
-        return null;
-    }
-
-    static String configPath() {
-        Shell.Result command = Shell.su("find /config/usb_gadget/*/c*/* -type d -maxdepth 0").exec();
-        if ( command.isSuccess() ) {
-            for (String result : command.getOut()) {
-                return result;
-            }
-        }
-        return null;
-    }
-
-    // FIXME - NEED TO ADD A TEST!!!
-    static String functionPath() {
-        Shell.Result command = Shell.su("find /config/usb_gadget/*/f*/*.rndis -type d -maxdepth 0").exec();
-        if ( command.isSuccess() ) {
-            for (String result : command.getOut()) {
-                return result;
-            }
-        }
-        return null;
+        return result;
     }
 
     static void unforwardInterface(String ipv4Interface, String ipv6Interface) {
@@ -166,32 +172,27 @@ public class Script {
         }
     }
 
-    static boolean isRNDIS() {
-        return Shell.su("[[ \"$(getprop sys.usb.usbtether)\" == \"true\" ]]").exec().isSuccess();
-    }
-
-    static void configureRNDIS() {
-        if ( !Shell.su("[[ \"$(getprop sys.usb.usbtether)\" == \"true\" ]]").exec().isSuccess() ) {
-            shellCommand("echo \"0x18d1\" > " + gadgetPath() + "/idVendor");
-            shellCommand("echo \"0x4ee4\" > " + gadgetPath() + "/idProduct");
-            shellCommand("rm -r " + configPath() + "/usbtether");
-            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
+    static void configureRNDIS(String gadgetPath, String configPath, String functionPath) {
+        if ( !Shell.su("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
+            shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
+            shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
+            shellCommand("rm -r " + configPath + "/usbtether");
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             //Do it again?
-            shellCommand("rm -r " + configPath() + "/usbtether");
-            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
+            shellCommand("rm -r " + configPath + "/usbtether");
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             Shell.su("setprop sys.usb.usbtether true").exec();
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
-
     }
 
-    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
+    static boolean configureNAT(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, String configPath, String functionPath) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
-            shellCommand("rm -r " + configPath() + "/usbtether");
-            shellCommand("ln -s " + functionPath() + " " + configPath() + "/usbtether");
+            shellCommand("rm -r " + configPath + "/usbtether");
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             return false;
         } else {
             enable_ip_forwarding();
@@ -255,7 +256,7 @@ public class Script {
         shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --split-pos=3 --uid 1:3003 &");
     }
 
-    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention) {
+    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention, String configPath) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
@@ -316,7 +317,7 @@ public class Script {
 
             if (!softReset) {
                 Shell.su("setprop sys.usb.usbtether false").exec();
-                shellCommand("rm -r " + configPath() + "/usbtether");
+                shellCommand("rm -r " + configPath + "/usbtether");
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");
