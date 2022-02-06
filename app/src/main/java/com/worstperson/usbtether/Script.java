@@ -38,10 +38,7 @@ public class Script {
     }
 
     static boolean isUSBConfigured() {
-        if (Shell.su("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess()) {
-            return true;
-        }
-        return false;
+        return Shell.su("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
     }
 
     static String[] gadgetVars() {
@@ -61,9 +58,10 @@ public class Script {
                     command2 = Shell.su("find " + result[0] + "/f*/*.rndis -type d -maxdepth 0").exec();
                     if ( command2.isSuccess() ) {
                         for (String result2 : command2.getOut()) {
-                            // FIXME - NEED TO ADD A TEST!!!
-                            result[2] = result2;
-                            break;
+                            if (Shell.su("[ \"$(ls -A " + result2 + ")\" ]").exec().isSuccess()) {
+                                result[2] = result2;
+                                break;
+                            }
                         }
                     }
                     if (result[0] != null && result[1] != null && result[2] != null) {

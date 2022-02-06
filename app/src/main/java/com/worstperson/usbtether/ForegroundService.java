@@ -175,6 +175,9 @@ public class ForegroundService extends Service {
 
             // Restart VPN if interface is down or has no connectivity for over 30 seconds
             boolean resetVPN = offlineCounter >= 5;
+            if (resetVPN) {
+                offlineCounter = 0;
+            }
             if (autostartVPN > 0 && (!isUp || resetVPN)) {
                 Log.i("usbtether", "VPN down, restarting...");
                 startVPN(autostartVPN, wireguardProfile, resetVPN);
