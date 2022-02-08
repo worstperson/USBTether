@@ -42,25 +42,36 @@ public class Script {
     }
 
     static String[] gadgetVars() {
-        String[] result = { null, null, null };
-        Shell.Result command = Shell.su("find /config/usb_gadget/* -type d -maxdepth 0").exec();
+        String[] result = new String[]{ null, null, null };
+        Shell.Result command = Shell.su("find /config/usb_gadget/* -maxdepth 0 -type d").exec();
         if ( command.isSuccess() ) {
             for (String result1 : command.getOut()) {
                 result[0] = result1;
                 if (Shell.su("[ \"$(cat " + result[0] + "/UDC )\" = \"$(getprop sys.usb.controller)\" ]").exec().isSuccess()) {
-                    Shell.Result command2 = Shell.su("find " + result[0] + "/c*/* -type d -maxdepth 0").exec();
+                    Shell.Result command2 = Shell.su("find " + result[0] + "/c*/* -maxdepth 0 -type d").exec();
                     if ( command2.isSuccess() ) {
                         for (String result2 : command2.getOut()) {
                             result[1] = result2;
                             break;
                         }
                     }
-                    command2 = Shell.su("find " + result[0] + "/f*/*.rndis -type d -maxdepth 0").exec();
+                    command2 = Shell.su("find " + result[0] + "/f*/rndis.* -maxdepth 0 -type d").exec();
                     if ( command2.isSuccess() ) {
                         for (String result2 : command2.getOut()) {
-                            if (Shell.su("[ \"$(ls -A " + result2 + ")\" ]").exec().isSuccess()) {
+                            if (Shell.su("ls -A " + result2).exec().isSuccess()) {
                                 result[2] = result2;
                                 break;
+                            }
+                        }
+                    }
+                    if (result[2] == null) {
+                        command2 = Shell.su("find " + result[0] + "/f*/*.rndis -maxdepth 0 -type d").exec();
+                        if (command2.isSuccess()) {
+                            for (String result2 : command2.getOut()) {
+                                if (Shell.su("[ \"$(ls -A " + result2 + ")\" ]").exec().isSuccess()) {
+                                    result[2] = result2;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -68,16 +79,10 @@ public class Script {
                         break;
                     }
                 }
+                result = new String[]{null, null, null};
             }
         }
         return result;
-    }
-
-    static void unforwardInterface(String ipv4Interface, String ipv6Interface) {
-        shellCommand("ndc ipfwd remove rndis0 " + ipv6Interface);
-        if (!ipv6Interface.equals(ipv4Interface)) {
-            shellCommand("ndc ipfwd remove rndis0 " + ipv4Interface);
-        }
     }
 
     static void forwardInterface(String ipv4Interface, String ipv6Interface) {
@@ -120,15 +125,6 @@ public class Script {
         }
     }
 
-    static void remove_marked_routes(String ipv4Addr, String ipv6Prefix) {
-        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-        Log.i("USBTether", "Removing marked routes");
-        shellCommand("ndc network route remove 99 rndis0 " + ipv4Prefix + ".0/24");
-        shellCommand("ndc network route remove 99 rndis0 " + ipv6Prefix + "/64");
-        shellCommand("ndc network route remove 99 rndis0 fe80::/64");
-        shellCommand("ndc network interface remove 99 rndis0");;
-    }
-
     static void add_marked_routes(String ipv4Addr, String ipv6Prefix) {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         Log.i("USBTether", "Adding marked routes");
@@ -166,20 +162,24 @@ public class Script {
             } else {
                 shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
             }
-
         }
     }
 
     static void configureRNDIS(String gadgetPath, String configPath, String functionPath) {
         if ( !Shell.su("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
-            shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
-            shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
-            shellCommand("rm -r " + configPath + "/usbtether");
-            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            //Do it again?
-            shellCommand("rm -r " + configPath + "/usbtether");
-            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            Shell.su("setprop sys.usb.usbtether true").exec();
+            if (configPath == null) {
+                shellCommand("setprop sys.usb.config rndis,adb");
+                shellCommand("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done");
+            } else {
+                shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
+                shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
+                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+                //Do it again?
+                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            }
+            shellCommand("setprop sys.usb.usbtether true");
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
@@ -189,8 +189,14 @@ public class Script {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
-            shellCommand("rm -r " + configPath + "/usbtether");
-            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            if (configPath == null) {
+                shellCommand("setprop sys.usb.config adb");
+                shellCommand("until [[ \"$(getprop sys.usb.state)\" != *\"rndis\"* ]]; do sleep 1; done");
+                shellCommand("setprop sys.usb.config rndis,adb");
+            } else {
+                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            }
             return false;
         } else {
             enable_ip_forwarding();
@@ -227,14 +233,6 @@ public class Script {
         return true;
     }
 
-    static void unconfigureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
-        unforwardInterface(ipv4Interface, ipv6Interface);
-        shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
-        shellCommand("ndc interface clearaddrs rndis0");
-        shellCommand("ndc interface setcfg rndis0 down");
-        remove_marked_routes(ipv4Addr, ipv6Prefix);
-    }
-
     static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
@@ -252,6 +250,30 @@ public class Script {
         shellCommand("killall tpws." + Build.SUPPORTED_ABIS[0]);
         //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
         shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --split-pos=3 --uid 1:3003 &");
+    }
+
+    static void unforwardInterface(String ipv4Interface, String ipv6Interface) {
+        shellCommand("ndc ipfwd remove rndis0 " + ipv6Interface);
+        if (!ipv6Interface.equals(ipv4Interface)) {
+            shellCommand("ndc ipfwd remove rndis0 " + ipv4Interface);
+        }
+    }
+
+    static void remove_marked_routes(String ipv4Addr, String ipv6Prefix) {
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        Log.i("USBTether", "Removing marked routes");
+        shellCommand("ndc network route remove 99 rndis0 " + ipv4Prefix + ".0/24");
+        shellCommand("ndc network route remove 99 rndis0 " + ipv6Prefix + "/64");
+        shellCommand("ndc network route remove 99 rndis0 fe80::/64");
+        shellCommand("ndc network interface remove 99 rndis0");;
+    }
+
+    static void unconfigureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
+        unforwardInterface(ipv4Interface, ipv6Interface);
+        shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
+        shellCommand("ndc interface clearaddrs rndis0");
+        shellCommand("ndc interface setcfg rndis0 down");
+        remove_marked_routes(ipv4Addr, ipv6Prefix);
     }
 
     static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String IPv6addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention, String configPath) {
@@ -314,8 +336,12 @@ public class Script {
             shellCommand("ndc ipfwd disable tethering");
 
             if (!softReset) {
-                Shell.su("setprop sys.usb.usbtether false").exec();
-                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("setprop sys.usb.usbtether false");
+                if (configPath == null) {
+                    shellCommand("setprop sys.usb.config adb");
+                } else {
+                    shellCommand("rm -r " + configPath + "/usbtether");
+                }
             }
         } else {
             Log.w("USBTether", "Tether interface not configured");

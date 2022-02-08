@@ -389,7 +389,7 @@ public class ForegroundService extends Service {
 
         String[] vars = Script.gadgetVars();
 
-        if (vars[0] != null && vars[1] != null && vars[2] != null) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || (vars[0] != null && vars[1] != null && vars[2] != null)) {
             gadgetPath = vars[0];
             configPath = vars[1];
             functionPath = vars[2];
