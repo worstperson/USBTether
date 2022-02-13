@@ -57,7 +57,6 @@ public class ForegroundService extends Service {
     private boolean natApplied = false;
     private boolean needsReset = false;
     private boolean usbReconnect = false;
-    private boolean usbState = false;
     private int offlineCounter = 0;
 
     private String gadgetPath = null;
@@ -140,7 +139,7 @@ public class ForegroundService extends Service {
 
         NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
-        if (usbState) {
+        if (Script.isUSBConfigured()) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             String lastNetwork = sharedPref.getString("lastNetwork", "");
@@ -228,7 +227,7 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        natApplied = Script.configureNAT(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, configPath, functionPath);
+                        natApplied = Script.configureTether(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, configPath, functionPath);
                         if (!natApplied || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
@@ -324,7 +323,6 @@ public class ForegroundService extends Service {
                 if (intent.getExtras().getBoolean("configured")) {
                     Log.i("usbtether", "USB Configured");
                     if (!handler.hasCallbacks(delayedRestore)) {
-                        usbState = true;
                         if (natApplied) {
                             // Fix for Google One VPN
                             needsReset = true;
@@ -350,7 +348,6 @@ public class ForegroundService extends Service {
                     needsReset = true;
                     usbReconnect = true;
                 }
-                usbState = false;
                 if (handler.hasCallbacks(delayedRestore)) {
                     Log.i("usbtether", "USB Disconnected, removing tether restore callback");
                     handler.removeCallbacks(delayedRestore);
@@ -418,7 +415,6 @@ public class ForegroundService extends Service {
             notification.setContentTitle("Service is running, USB disconnected");
             startForeground(1, notification.build());
 
-            usbState = Script.isUSBConfigured();
             Script.configureRNDIS(gadgetPath, configPath, functionPath);
 
             registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
