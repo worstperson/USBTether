@@ -37,6 +37,22 @@ public class Script {
         }
     }
 
+    static boolean hasTTL() {
+        return Shell.su("iptables -j TTL --help | grep \"TTL\"").exec().isSuccess();
+    }
+
+    static boolean hasTable() {
+        return Shell.su("ip6tables --table nat --list").exec().isSuccess();
+    }
+
+    static boolean hasSNAT() {
+        return Shell.su("ip6tables -j SNAT --help | grep \"SNAT\"").exec().isSuccess();
+    }
+
+    static boolean hasMASQUERADE() {
+        return Shell.su("ip6tables --table nat --list").exec().isSuccess();
+    }
+
     static boolean isUSBConfigured() {
         return Shell.su("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
     }
@@ -85,7 +101,7 @@ public class Script {
         return result;
     }
 
-    static private boolean set_ip_addresses(String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
+    static private boolean configureAddresses(String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
         Log.i("USBTether", "Setting IP addresses");
         if (!ipv6Masquerading && !ipv6SNAT) {
             shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
@@ -123,7 +139,7 @@ public class Script {
             Log.w("usbtether", "No tether interface...");
         } else {
             forwardInterface(ipv4Interface, ipv6Interface);
-            if (set_ip_addresses(ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+            if (configureAddresses(ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 Log.i("USBTether", "Adding marked routes");
                 shellCommand("ndc network interface add 99 rndis0");

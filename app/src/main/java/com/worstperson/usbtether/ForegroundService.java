@@ -384,6 +384,25 @@ public class ForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
+        boolean hasTTL = Script.hasTTL();
+        boolean hasTable = Script.hasTable();
+        boolean hasSNAT = Script.hasSNAT();
+        boolean hasMASQUERADE = Script.hasMASQUERADE();
+        if (!hasTTL || !hasTable || !hasSNAT || !hasMASQUERADE) {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            SharedPreferences.Editor edit = sharedPref.edit();
+            if (!hasTTL) {
+                edit.putBoolean("fixTTL", false);
+            }
+            if (!hasTable || !hasSNAT) {
+                edit.putBoolean("ipv6SNAT", false);
+            }
+            if (!hasTable || !hasMASQUERADE) {
+                edit.putBoolean("ipv6Masquerading", false);
+            }
+            edit.apply();
+        }
+
         String[] vars = Script.gadgetVars();
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || (vars[0] != null && vars[1] != null && vars[2] != null)) {

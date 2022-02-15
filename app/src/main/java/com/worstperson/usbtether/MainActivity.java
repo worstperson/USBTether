@@ -37,6 +37,7 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
@@ -108,8 +109,13 @@ public class MainActivity extends AppCompatActivity {
 
         if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(getPackageName())) {
             Snackbar.make(view, "IGNORE_BATTERY_OPTIMIZATIONS", Snackbar.LENGTH_INDEFINITE).setAction(
-                    "Grant", view1 -> startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:" + getPackageName())))).show();
+                    "Grant", new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view1) {
+                            MainActivity.this.startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:" + MainActivity.this.getPackageName())));
+                        }
+                    }).show();
         }
 
         File file = new File(getFilesDir().getPath() + "/dnsmasq.armeabi-v7a");
@@ -225,10 +231,36 @@ public class MainActivity extends AppCompatActivity {
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
 
+
+        boolean hasTTL = Script.hasTTL();
+        boolean hasTable = Script.hasTable();
+        boolean hasSNAT = Script.hasSNAT();
+        boolean hasMASQUERADE = Script.hasMASQUERADE();
+        if (!hasTTL || !hasTable || !hasSNAT || !hasMASQUERADE) {
+            SharedPreferences.Editor edit = sharedPref.edit();
+            if (!hasTTL) {
+                fixTTL = false;
+                edit.putBoolean("fixTTL", false);
+            }
+            if (!hasTable || !hasSNAT) {
+                ipv6SNAT = false;
+                edit.putBoolean("ipv6SNAT", false);
+            }
+            if (!hasTable || !hasMASQUERADE) {
+                ipv6Masquerading =false;
+                edit.putBoolean("ipv6Masquerading", false);
+            }
+            edit.apply();
+        }
+
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
         ttl_switch.setChecked(fixTTL);
         dpi_switch.setChecked(dpiCircumvention);
+
+        if (!hasTTL) {
+            ttl_switch.setEnabled(false);
+        }
 
         ipv4_text.setText(ipv4Addr);
         wg_text.setText(wireguardProfile);
@@ -238,16 +270,24 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<String> arraySpinner2 = new ArrayList<>();
         arraySpinner2.add("None");
-        arraySpinner2.add("Masquerading");
-        arraySpinner2.add("SNAT");
+        if (hasTable) {
+            if (hasSNAT) {
+                arraySpinner2.add("SNAT");
+            }
+            if (hasMASQUERADE) {
+                arraySpinner2.add("Masquerading");
+            }
+        }
         ArrayAdapter<String> adapter2 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner2);
         adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         nat_spinner.setAdapter(adapter2);
         int position = 0;
-        if (ipv6Masquerading) {
-            position = 1;
-        } else if (ipv6SNAT) {
-            position = 2;
+        if (hasTable) {
+            if ( hasSNAT && ipv6SNAT) {
+                position = 1;
+            } else if (hasMASQUERADE && ipv6Masquerading) {
+                position = 2;
+            }
         }
         nat_spinner.setSelection(position);
 
@@ -293,50 +333,64 @@ public class MainActivity extends AppCompatActivity {
             wgp_layout.setVisibility(View.GONE);
         }
 
-        service_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            dnsmasq_switch.setEnabled(!isChecked);
-            ttl_switch.setEnabled(!isChecked);
-            dpi_switch.setEnabled(!isChecked);
-            ipv4_text.setEnabled(!isChecked);
-            wg_text.setEnabled(!isChecked);
-            bandwidth_text.setEnabled(!isChecked);
-            if (autostartVPN == 0) {
-                interface_spinner.setEnabled(!isChecked);
-            }
-            nat_spinner.setEnabled(!isChecked);
-            prefix_spinner.setEnabled(!isChecked);
-            vpn_spinner.setEnabled(!isChecked);
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("serviceEnabled", isChecked);
-            edit.apply();
-            Intent it = new Intent(MainActivity.this, ForegroundService.class);
-            if (isChecked) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(it);
-                } else {
-                    startService(it);
+        service_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                dnsmasq_switch.setEnabled(!isChecked);
+                if (hasTTL) {
+                    ttl_switch.setEnabled(!isChecked);
                 }
-            } else {
-                stopService(it);
+                dpi_switch.setEnabled(!isChecked);
+                ipv4_text.setEnabled(!isChecked);
+                wg_text.setEnabled(!isChecked);
+                bandwidth_text.setEnabled(!isChecked);
+                if (autostartVPN == 0) {
+                    interface_spinner.setEnabled(!isChecked);
+                }
+                nat_spinner.setEnabled(!isChecked);
+                prefix_spinner.setEnabled(!isChecked);
+                vpn_spinner.setEnabled(!isChecked);
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("serviceEnabled", isChecked);
+                edit.apply();
+                Intent it = new Intent(MainActivity.this, ForegroundService.class);
+                if (isChecked) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        MainActivity.this.startForegroundService(it);
+                    } else {
+                        MainActivity.this.startService(it);
+                    }
+                } else {
+                    MainActivity.this.stopService(it);
+                }
             }
         });
 
-        dnsmasq_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("dnsmasq", isChecked);
-            edit.apply();
+        dnsmasq_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("dnsmasq", isChecked);
+                edit.apply();
+            }
         });
 
-        ttl_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("fixTTL", isChecked);
-            edit.apply();
+        ttl_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("fixTTL", isChecked);
+                edit.apply();
+            }
         });
 
-        dpi_switch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            edit.putBoolean("dpiCircumvention", isChecked);
-            edit.apply();
+        dpi_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("dpiCircumvention", isChecked);
+                edit.apply();
+            }
         });
 
         interface_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
