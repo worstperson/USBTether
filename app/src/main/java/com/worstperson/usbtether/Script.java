@@ -50,7 +50,7 @@ public class Script {
     }
 
     static boolean hasMASQUERADE() {
-        return Shell.su("ip6tables --table nat --list").exec().isSuccess();
+        return Shell.su("ip6tables -j SNAT --help | grep \"MASQUERADE\"").exec().isSuccess();
     }
 
     static boolean isUSBConfigured() {
