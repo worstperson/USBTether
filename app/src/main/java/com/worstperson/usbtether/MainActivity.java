@@ -118,6 +118,8 @@ public class MainActivity extends AppCompatActivity {
                     }).show();
         }
 
+        // FIXME - Build these dependencies as libraries and add them to the project
+
         File file = new File(getFilesDir().getPath() + "/dnsmasq.armeabi-v7a");
         if (!file.exists()) {
             try (InputStream in = getResources().openRawResource(R.raw.dnsmasq_arm)) {
@@ -230,7 +232,6 @@ public class MainActivity extends AppCompatActivity {
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
-
 
         boolean hasTTL = Script.hasTTL();
         boolean hasTable = Script.hasTable();

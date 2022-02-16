@@ -204,7 +204,7 @@ public class ForegroundService extends Service {
                             Log.i("usbtether", "Starting tether operation...");
                         } else {
                             Log.i("usbtether", "Network changed, resetting interface...");
-                            Script.resetInterface(true, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention, configPath);
+                            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
                             natApplied = false;
                         }
                         String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
@@ -231,7 +231,8 @@ public class ForegroundService extends Service {
                         if (!natApplied || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
-                                Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention, configPath);
+                                Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
+                                Script.unconfigureRNDIS(configPath);
                                 natApplied = false;
                             }
                             if (!handler.hasCallbacks(delayedRestore)) {
@@ -260,10 +261,11 @@ public class ForegroundService extends Service {
                                 edit.apply();
                             }
                             if (usbReconnect) {
-                                Script.unconfigureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
+                                Script.unconfigureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix);
                                 if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
-                                    Script.resetInterface(false, ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention, configPath);
+                                    Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
+                                    Script.unconfigureRNDIS(configPath);
                                     natApplied = false;
                                     if (!handler.hasCallbacks(delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
@@ -482,7 +484,8 @@ public class ForegroundService extends Service {
         }
 
         if (!lastNetwork.equals("")) {
-            Script.resetInterface(false, ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention, configPath);
+            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention);
+            Script.unconfigureRNDIS(configPath);
         }
 
         natApplied = false;

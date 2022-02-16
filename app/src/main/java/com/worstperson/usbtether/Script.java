@@ -20,8 +20,6 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
-import java.util.List;
-
 public class Script {
 
     static {
@@ -152,7 +150,7 @@ public class Script {
         return false;
     }
 
-    static void unconfigureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
+    static void unconfigureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         unforwardInterface(ipv4Interface, ipv6Interface);
         shellCommand("ip -6 route del " + ipv6Prefix  + "/64 dev rndis0 src " + ipv6Prefix  + "1");
@@ -249,6 +247,15 @@ public class Script {
         }
     }
 
+    static void unconfigureRNDIS(String configPath) {
+        shellCommand("setprop sys.usb.usbtether false");
+        if (configPath == null) {
+            shellCommand("setprop sys.usb.config adb");
+        } else {
+            shellCommand("rm -r " + configPath + "/usbtether");
+        }
+    }
+
     static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, String configPath, String functionPath) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
@@ -298,7 +305,7 @@ public class Script {
         return true;
     }
 
-    static void resetInterface(boolean softReset, String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention, String configPath) {
+    static void unconfigureTether(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
         }
@@ -322,16 +329,8 @@ public class Script {
             }
             unconfigureNAT(ipv4Interface, ipv6Interface, ipv6Masquerading, ipv6SNAT, ipv6Addr);
             unforwardInterface(ipv4Interface, ipv6Interface);
-            unconfigureRoutes(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
+            unconfigureRoutes(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix);
             shellCommand("ndc ipfwd disable tethering");
-            if (!softReset) {
-                shellCommand("setprop sys.usb.usbtether false");
-                if (configPath == null) {
-                    shellCommand("setprop sys.usb.config adb");
-                } else {
-                    shellCommand("rm -r " + configPath + "/usbtether");
-                }
-            }
         } else {
             Log.w("USBTether", "Tether interface not configured");
         }
