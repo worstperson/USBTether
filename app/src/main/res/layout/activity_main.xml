@@ -240,10 +240,33 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/vpn_layout"
+                android:id="@+id/dmz_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_below="@id/dpi_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="DMZ:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Switch
+                    android:id="@+id/dmz_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/vpn_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/dmz_layout"
                 android:layout_marginLeft="20pt"
                 android:layout_marginTop="5pt"
                 android:layout_marginRight="20pt"
