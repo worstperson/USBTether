@@ -203,7 +203,7 @@ public class Script {
         }
     }
 
-    static void unconfigureNAT(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
+    static private void unconfigureNAT(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Addr) {
         if (ipv6Masquerading || ipv6SNAT) {
             String prefix = "natctrl";
             String counter = prefix + "_tether";
@@ -225,6 +225,42 @@ public class Script {
             shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
         }
         shellCommand("ndc nat disable rndis0 " + ipv4Interface + " 99");
+    }
+
+    //    *AT&T runs a NAT for both IPv4 and IPv6, no port forwarding possible without a tunnel.
+    //    *T-Mobile runs a NAT for IPv4 and open for IPv6.
+    //    *Verizon is untested. Presumed to be the same as T-Mobile.
+    //
+    // IPv6 seems to be the only protocol that is exposed and static addressing is only available
+    // to business accounts here. The big issue is that port forwarding is a IPv4 protocol.
+    // The current plan is to create a server to receive UPNP requests and manage forwards, though
+    // IPv6 leases will need to be derived somehow.
+    //
+    // Using DMZ with a router setup with NAT/NAT6 seems like the obvious solution, but UPnP is an
+    // IPv4 protocol and clients will not know to request forwards.
+    //
+    static private void configureDMZ(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, boolean ipv6Masquerading, boolean ipv6SNAT) {
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        shellCommand("iptables -t nat -A PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        shellCommand("iptables -t nat -A PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        shellCommand("iptables -I tetherctrl_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        if (ipv6Masquerading || ipv6SNAT) {
+            shellCommand("ip6tables -t nat -A PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
+            shellCommand("ip6tables -t nat -A PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
+            shellCommand("ip6tables -I tetherctrl_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        }
+    }
+
+    static private void unconfigureDMZ(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, boolean ipv6Masquerading, boolean ipv6SNAT) {
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        shellCommand("iptables -t nat -D PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        shellCommand("iptables -t nat -D PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        shellCommand("iptables -D tetherctrl_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        if (ipv6Masquerading || ipv6SNAT) {
+            shellCommand("ip6tables -t nat -D PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
+            shellCommand("ip6tables -t nat -D PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
+            shellCommand("ip6tables -D tetherctrl_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        }
     }
 
     static void configureRNDIS(String gadgetPath, String configPath, String functionPath) {
@@ -256,7 +292,7 @@ public class Script {
         }
     }
 
-    static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, String configPath, String functionPath) {
+    static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, String configPath, String functionPath) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
@@ -301,13 +337,19 @@ public class Script {
                 shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
                 shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
             }
+            if (dmz) {
+                configureDMZ(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
+            }
         }
         return true;
     }
 
-    static void unconfigureTether(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention) {
+    static void unconfigureTether(String ipv4Interface, String ipv6Interface, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv4Addr, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
         if (dnsmasq) {
             shellCommand("killall dnsmasq." + Build.SUPPORTED_ABIS[0]);
+        }
+        if (dmz) {
+            unconfigureDMZ(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT);
         }
         if (dpiCircumvention) {
             shellCommand("killall tpws." + Build.SUPPORTED_ABIS[0]);

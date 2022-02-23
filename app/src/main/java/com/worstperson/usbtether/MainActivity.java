@@ -197,6 +197,7 @@ public class MainActivity extends AppCompatActivity {
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
         Switch ttl_switch = findViewById(R.id.ttl_switch);
         Switch dpi_switch = findViewById(R.id.dpi_switch);
+        Switch dmz_switch = findViewById(R.id.dmz_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
@@ -227,6 +228,7 @@ public class MainActivity extends AppCompatActivity {
         boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
+        boolean dmz = sharedPref.getBoolean("dmz", false);
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
@@ -258,6 +260,7 @@ public class MainActivity extends AppCompatActivity {
         dnsmasq_switch.setChecked(dnsmasq);
         ttl_switch.setChecked(fixTTL);
         dpi_switch.setChecked(dpiCircumvention);
+        dmz_switch.setChecked(dmz);
 
         if (!hasTTL) {
             ttl_switch.setEnabled(false);
@@ -315,6 +318,7 @@ public class MainActivity extends AppCompatActivity {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
             dpi_switch.setEnabled(false);
+            dmz_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -342,6 +346,7 @@ public class MainActivity extends AppCompatActivity {
                     ttl_switch.setEnabled(!isChecked);
                 }
                 dpi_switch.setEnabled(!isChecked);
+                dmz_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
                 wg_text.setEnabled(!isChecked);
                 bandwidth_text.setEnabled(!isChecked);
@@ -390,6 +395,15 @@ public class MainActivity extends AppCompatActivity {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("dpiCircumvention", isChecked);
+                edit.apply();
+            }
+        });
+
+        dmz_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("dmz", isChecked);
                 edit.apply();
             }
         });
