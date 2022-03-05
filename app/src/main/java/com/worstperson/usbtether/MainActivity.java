@@ -32,6 +32,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -463,13 +464,13 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 String tetherInterface = "";
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+                boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putInt("autostartVPN", position);
                 switch (position) {
                     case 0:
                         wgp_layout.setVisibility(View.GONE);
-                        interface_spinner.setEnabled(true);
                         break;
                     case 1: case 2:
                         wgp_layout.setVisibility(View.VISIBLE);
@@ -478,16 +479,18 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             tetherInterface = wireguardProfile;
                         }
-                        interface_spinner.setEnabled(false);
                         break;
                     default:
                         wgp_layout.setVisibility(View.GONE);
                         tetherInterface = "tun0";
-                        interface_spinner.setEnabled(false);
+
                 }
                 if (position > 0) {
+                    interface_spinner.setEnabled(false);
                     setInterfaceSpinner(tetherInterface, interface_spinner);
                     edit.putString("tetherInterface", tetherInterface);
+                } else if (!serviceEnabled) {
+                    interface_spinner.setEnabled(true);
                 }
                 edit.apply();
             }
