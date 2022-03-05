@@ -114,6 +114,12 @@ public class ForegroundService extends Service {
 
     private void startVPN(int autostartVPN, String wireguardProfile, boolean resetVPN) {
         if (autostartVPN == 1 || autostartVPN == 2) {
+            if (resetVPN) {
+                Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
+                i.setPackage("com.wireguard.android");
+                i.putExtra("tunnel", wireguardProfile);
+                sendBroadcast(i);
+            }
             Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
             i.setPackage("com.wireguard.android");
             i.putExtra("tunnel", wireguardProfile);
@@ -196,7 +202,7 @@ public class ForegroundService extends Service {
 
             // fixme - make this a selectable gui option to allow/disallow offline connections
             // fixme - we only know the primary interface at this point
-            if (isUp && Script.testConnection(currentInterface)) {
+            if (isUp && (tetherInterface.equals("Auto") || (Script.testConnection(currentInterface) && ((!ipv6Masquerading && !ipv6SNAT) || Script.testConnection6(currentInterface))))) {
                 offlineCounter = 0;
                 if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
                     if (!natApplied || (natApplied && tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork))) {
@@ -290,6 +296,8 @@ public class ForegroundService extends Service {
                             needsReset = false;
                         } else {
                             Log.i("usbtether", "No action required");
+                            notification.setContentTitle("Service is running, Connected");
+                            mNotificationManager.notify(1, notification.build());
                         }
                     }
                 } else {
@@ -478,7 +486,7 @@ public class ForegroundService extends Service {
         Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
-        Boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
+        boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         String ipv4Prefix = "";
         if (isXLAT) {

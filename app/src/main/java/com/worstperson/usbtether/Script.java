@@ -271,10 +271,10 @@ public class Script {
             } else {
                 shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
                 shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
-                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
                 //Do it again?
-                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             }
             shellCommand("setprop sys.usb.usbtether true");
@@ -288,7 +288,7 @@ public class Script {
         if (configPath == null) {
             shellCommand("setprop sys.usb.config adb");
         } else {
-            shellCommand("rm -r " + configPath + "/usbtether");
+            shellCommand("unlink " + configPath + "/usbtether");
         }
     }
 
@@ -301,7 +301,7 @@ public class Script {
                 shellCommand("until [[ \"$(getprop sys.usb.state)\" != *\"rndis\"* ]]; do sleep 1; done");
                 shellCommand("setprop sys.usb.config rndis,adb");
             } else {
-                shellCommand("rm -r " + configPath + "/usbtether");
+                shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             }
             return false;
@@ -395,11 +395,20 @@ public class Script {
     }
 
     static Boolean testConnection(String tetherInterface) {
-        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess() || Shell.su("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
-            Log.i("usbtether", tetherInterface + " is online");
+        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+            Log.i("usbtether", tetherInterface + " IPv4 is online");
             return true;
         }
-        Log.w("usbtether", tetherInterface + " is offline");
+        Log.w("usbtether", tetherInterface + " IPv4 is offline");
+        return false;
+    }
+
+    static Boolean testConnection6(String tetherInterface) {
+        if (Shell.su("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
+            Log.i("usbtether", tetherInterface + " IPv6 is online");
+            return true;
+        }
+        Log.w("usbtether", tetherInterface + " IPv6 is offline");
         return false;
     }
 
