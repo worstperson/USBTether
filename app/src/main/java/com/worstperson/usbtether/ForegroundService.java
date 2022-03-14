@@ -66,7 +66,7 @@ public class ForegroundService extends Service {
     NotificationCompat.Builder notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
-            .setNotificationSilent();
+            .setSilent(true);
 
     final Handler handler = new Handler(Looper.getMainLooper());
     Runnable delayedRestore = new Runnable() {

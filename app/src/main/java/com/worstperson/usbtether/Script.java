@@ -23,66 +23,66 @@ import com.topjohnwu.superuser.Shell;
 public class Script {
 
     static {
-        Shell.enableVerboseLogging = BuildConfig.DEBUG;
+        Shell.enableVerboseLogging = true; //BuildConfig.DEBUG;
         Shell.setDefaultBuilder(Shell.Builder.create()
                 .setFlags(Shell.FLAG_REDIRECT_STDERR)
                 .setTimeout(10));
     }
 
     static private void shellCommand(String command) {
-        for (String message : Shell.su(command).exec().getOut()) {
+        for (String message : Shell.cmd(command).exec().getOut()) {
             Log.i("USBTether", message);
         }
     }
 
     static boolean hasTTL() {
-        return Shell.su("iptables -j TTL --help | grep \"TTL\"").exec().isSuccess();
+        return Shell.cmd("iptables -j TTL --help | grep \"TTL\"").exec().isSuccess();
     }
 
     static boolean hasTable() {
-        return Shell.su("ip6tables --table nat --list").exec().isSuccess();
+        return Shell.cmd("ip6tables --table nat --list").exec().isSuccess();
     }
 
     static boolean hasSNAT() {
-        return Shell.su("ip6tables -j SNAT --help | grep \"SNAT\"").exec().isSuccess();
+        return Shell.cmd("ip6tables -j SNAT --help | grep \"SNAT\"").exec().isSuccess();
     }
 
     static boolean hasMASQUERADE() {
-        return Shell.su("ip6tables -j MASQUERADE --help | grep \"MASQUERADE\"").exec().isSuccess();
+        return Shell.cmd("ip6tables -j MASQUERADE --help | grep \"MASQUERADE\"").exec().isSuccess();
     }
 
     static boolean isUSBConfigured() {
-        return Shell.su("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
+        return Shell.cmd("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
     }
 
     static String[] gadgetVars() {
         String[] result = new String[]{ null, null, null };
-        Shell.Result command = Shell.su("find /config/usb_gadget/* -maxdepth 0 -type d").exec();
+        Shell.Result command = Shell.cmd("find /config/usb_gadget/* -maxdepth 0 -type d").exec();
         if ( command.isSuccess() ) {
             for (String result1 : command.getOut()) {
                 result[0] = result1;
-                if (Shell.su("[ \"$(cat " + result[0] + "/UDC )\" = \"$(getprop sys.usb.controller)\" ]").exec().isSuccess()) {
-                    Shell.Result command2 = Shell.su("find " + result[0] + "/configs/* -maxdepth 0 -type d").exec();
+                if (Shell.cmd("[ \"$(cat " + result[0] + "/UDC )\" = \"$(getprop sys.usb.controller)\" ]").exec().isSuccess()) {
+                    Shell.Result command2 = Shell.cmd("find " + result[0] + "/configs/* -maxdepth 0 -type d").exec();
                     if ( command2.isSuccess() ) {
                         for (String result2 : command2.getOut()) {
                             result[1] = result2;
                             break;
                         }
                     }
-                    command2 = Shell.su("find " + result[0] + "/functions/rndis.* -maxdepth 0 -type d").exec();
+                    command2 = Shell.cmd("find " + result[0] + "/functions/rndis.* -maxdepth 0 -type d").exec();
                     if ( command2.isSuccess() ) {
                         for (String result2 : command2.getOut()) {
-                            if (Shell.su("ls -A " + result2).exec().isSuccess()) {
+                            if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
                                 result[2] = result2;
                                 break;
                             }
                         }
                     }
                     if (result[2] == null) {
-                        command2 = Shell.su("find " + result[0] + "/functions/*.rndis -maxdepth 0 -type d").exec();
+                        command2 = Shell.cmd("find " + result[0] + "/functions/*.rndis -maxdepth 0 -type d").exec();
                         if (command2.isSuccess()) {
                             for (String result2 : command2.getOut()) {
-                                if (Shell.su("ls -A " + result2).exec().isSuccess()) {
+                                if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
                                     result[2] = result2;
                                     break;
                                 }
@@ -109,7 +109,7 @@ public class Script {
         shellCommand("ndc interface setcfg rndis0 " + ipv4Addr + " 24 up");
         Log.i("USBTether", "Waiting for interface to come up");
         for (int waitTime = 1; waitTime <= 5; waitTime++) {
-            if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
+            if (Shell.cmd("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
                 break;
             }
             Log.i("USBTether", "waiting... " + waitTime);
@@ -124,7 +124,7 @@ public class Script {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        if (Shell.su("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
+        if (Shell.cmd("[ \"$(cat /sys/class/net/rndis0/operstate)\" = \"up\" ]").exec().isSuccess()) {
             shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev rndis0 src " + ipv6Prefix + "1");
             return true;
         } else {
@@ -133,7 +133,7 @@ public class Script {
     }
 
     static boolean configureRoutes(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, Boolean ipv6Masquerading, Boolean ipv6SNAT) {
-        if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
+        if (!Shell.cmd("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "No tether interface...");
         } else {
             forwardInterface(ipv4Interface, ipv6Interface);
@@ -264,7 +264,7 @@ public class Script {
     }
 
     static void configureRNDIS(String gadgetPath, String configPath, String functionPath) {
-        if ( !Shell.su("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
+        if ( !Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
             if (configPath == null) {
                 shellCommand("setprop sys.usb.config rndis,adb");
                 shellCommand("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done");
@@ -294,7 +294,7 @@ public class Script {
 
     static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, Boolean ipv6Masquerading, Boolean ipv6SNAT, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, String configPath, String functionPath) {
         // Check that rndis0 is actually available to avoid wasting time
-        if (!Shell.su("ip link set dev rndis0 down").exec().isSuccess()) {
+        if (!Shell.cmd("ip link set dev rndis0 down").exec().isSuccess()) {
             Log.w("usbtether", "Aborting tether...");
             if (configPath == null) {
                 shellCommand("setprop sys.usb.config adb");
@@ -358,7 +358,7 @@ public class Script {
             shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
             shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
         }
-        if ( Shell.su("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
+        if ( Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) {
@@ -395,7 +395,7 @@ public class Script {
     }
 
     static Boolean testConnection(String tetherInterface) {
-        if (Shell.su("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+        if (Shell.cmd("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv4 is online");
             return true;
         }
@@ -404,7 +404,7 @@ public class Script {
     }
 
     static Boolean testConnection6(String tetherInterface) {
-        if (Shell.su("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
+        if (Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv6 is online");
             return true;
         }
