@@ -416,44 +416,39 @@ public class ForegroundService extends Service {
 
         String[] vars = Script.gadgetVars();
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || (vars[0] != null && vars[1] != null && vars[2] != null)) {
-            gadgetPath = vars[0];
-            configPath = vars[1];
-            functionPath = vars[2];
+        gadgetPath = vars[0];
+        configPath = vars[1];
+        functionPath = vars[2];
 
-            Log.i("usbtether", "gadgetPath: " + gadgetPath);
-            Log.i("usbtether", "configPath: " + configPath);
-            Log.i("usbtether", "functionPath: " + functionPath);
+        Log.i("usbtether", "gadgetPath: " + gadgetPath);
+        Log.i("usbtether", "configPath: " + configPath);
+        Log.i("usbtether", "functionPath: " + functionPath);
 
-            powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-            if (powerManager != null) {
-                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "USB Tether::TetherWakelockTag");
-            }
-            if (wakeLock != null && !wakeLock.isHeld()) {
-                wakeLock.acquire();
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel serviceChannel = new NotificationChannel(CHANNEL_ID, "Foreground Service Channel", NotificationManager.IMPORTANCE_HIGH);
-                NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (notificationManager != null) {
-                    notificationManager.createNotificationChannel(serviceChannel);
-                }
-            }
-
-            Toast.makeText(this, "Service started by user.", Toast.LENGTH_LONG).show();
-
-            notification.setContentTitle("Service is running, USB disconnected");
-            startForeground(1, notification.build());
-
-            Script.configureRNDIS(gadgetPath, configPath, functionPath);
-
-            registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
-            registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
-        } else {
-            Toast.makeText(this, "USB Gadget Unavailable", Toast.LENGTH_LONG).show();
-            notification.setContentTitle("USB Gadget Unavailable");
-            startForeground(1, notification.build());
+        powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "USB Tether::TetherWakelockTag");
         }
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(CHANNEL_ID, "Foreground Service Channel", NotificationManager.IMPORTANCE_HIGH);
+            NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(serviceChannel);
+            }
+        }
+
+        Toast.makeText(this, "Service started by user.", Toast.LENGTH_LONG).show();
+
+        notification.setContentTitle("Service is running, USB disconnected");
+        startForeground(1, notification.build());
+
+        Script.configureRNDIS(gadgetPath, configPath, functionPath);
+
+        registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
+        registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+
         return Service.START_STICKY;
     }
 

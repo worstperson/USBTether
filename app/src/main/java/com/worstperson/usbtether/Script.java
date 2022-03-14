@@ -23,7 +23,7 @@ import com.topjohnwu.superuser.Shell;
 public class Script {
 
     static {
-        Shell.enableVerboseLogging = true; //BuildConfig.DEBUG;
+        Shell.enableVerboseLogging = BuildConfig.DEBUG;
         Shell.setDefaultBuilder(Shell.Builder.create()
                 .setFlags(Shell.FLAG_REDIRECT_STDERR)
                 .setTimeout(10));
