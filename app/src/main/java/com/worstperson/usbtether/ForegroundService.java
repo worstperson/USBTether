@@ -32,12 +32,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.util.Log;
-import android.widget.Toast;
-import androidx.core.app.NotificationCompat;
-
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.util.Log;
+import android.widget.Toast;
+import androidx.core.os.HandlerCompat;
+import androidx.core.app.NotificationCompat;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -67,7 +67,6 @@ public class ForegroundService extends Service {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setSilent(true);
-
     final Handler handler = new Handler(Looper.getMainLooper());
     Runnable delayedRestore = new Runnable() {
         @Override
@@ -242,7 +241,7 @@ public class ForegroundService extends Service {
                                 Script.unconfigureRNDIS(configPath);
                                 natApplied = false;
                             }
-                            if (!handler.hasCallbacks(delayedRestore)) {
+                            if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                 Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
                                 handler.postDelayed(delayedRestore, 5000);
                                 notification.setContentTitle("Service is running, waiting 5 seconds...");
@@ -274,7 +273,7 @@ public class ForegroundService extends Service {
                                     Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, clientBandwidth, dpiCircumvention, dmz);
                                     Script.unconfigureRNDIS(configPath);
                                     natApplied = false;
-                                    if (!handler.hasCallbacks(delayedRestore)) {
+                                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
                                         handler.postDelayed(delayedRestore, 5000);
                                         notification.setContentTitle("Service is running, waiting 5 seconds...");
@@ -307,7 +306,7 @@ public class ForegroundService extends Service {
             } else {
                 offlineCounter = offlineCounter + 1;
                 Log.w("usbtether", "Failed, tether interface unavailable");
-                if (!handler.hasCallbacks(delayedRestore)) {
+                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                     Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
                     handler.postDelayed(delayedRestore, 5000);
                     notification.setContentTitle("Service is running, waiting 5 seconds...");
@@ -333,7 +332,7 @@ public class ForegroundService extends Service {
                 Log.i("usbtether", "USB Connected");
                 if (intent.getExtras().getBoolean("configured")) {
                     Log.i("usbtether", "USB Configured");
-                    if (!handler.hasCallbacks(delayedRestore)) {
+                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                         if (natApplied) {
                             // Fix for Google One VPN
                             needsReset = true;
@@ -359,7 +358,7 @@ public class ForegroundService extends Service {
                     needsReset = true;
                     usbReconnect = true;
                 }
-                if (handler.hasCallbacks(delayedRestore)) {
+                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                     Log.i("usbtether", "USB Disconnected, removing tether restore callback");
                     handler.removeCallbacks(delayedRestore);
                 }
@@ -376,7 +375,7 @@ public class ForegroundService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.i("usbtether", "Recieved CONNECTIVITY_CHANGE broadcast");
-            if (!handler.hasCallbacks(delayedRestore)) {
+            if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                 restoreTether();
             } else {
                 Log.i("usbtether", "Skipping event due to pending callback");
@@ -466,7 +465,7 @@ public class ForegroundService extends Service {
             unregisterReceiver(ConnectionReceiver);
         } catch (IllegalArgumentException ignored) {}
 
-        if (handler.hasCallbacks(delayedRestore)) {
+        if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
             handler.removeCallbacks(delayedRestore);
         }
 
