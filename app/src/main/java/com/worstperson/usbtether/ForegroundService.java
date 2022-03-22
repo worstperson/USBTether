@@ -147,10 +147,12 @@ public class ForegroundService extends Service {
         if (Script.isUSBConfigured()) {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
+            //if (tetherInterface.equals("TPROXY")) { //TODO - ADD SUPPORT FOR THIS
+            //    tetherInterface = "Auto";
+            //}
             String lastNetwork = sharedPref.getString("lastNetwork", "");
             String lastIPv6 = sharedPref.getString("lastIPv6", "");
-            Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-            Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+            String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
             Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
             boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
             boolean dmz = sharedPref.getBoolean("dmz", false);
@@ -200,8 +202,8 @@ public class ForegroundService extends Service {
             }
 
             // fixme - make this a selectable gui option to allow/disallow offline connections
-            // fixme - we only know the primary interface at this point
-            if (isUp && (tetherInterface.equals("Auto") || (Script.testConnection(currentInterface) && ((!ipv6Masquerading && !ipv6SNAT) || Script.testConnection6(currentInterface))))) {
+            // TPROXY skips IPv6 test since we are not controlling the interface it uses
+            if (isUp && (tetherInterface.equals("Auto") || (Script.testConnection(currentInterface) && ((!ipv6TYPE.equals("MASQUERADE") && !ipv6TYPE.equals("SNAT")) || Script.testConnection6(currentInterface))))) {
                 offlineCounter = 0;
                 if (currentInterface != null && !currentInterface.equals("") && !currentInterface.equals("Auto")) {
                     if (!natApplied || (tetherInterface.equals("Auto") && !currentInterface.equals(lastNetwork))) {
@@ -210,10 +212,10 @@ public class ForegroundService extends Service {
                             Log.i("usbtether", "Starting tether operation...");
                         } else {
                             Log.i("usbtether", "Network changed, resetting interface...");
-                            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+                            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                             natApplied = false;
                         }
-                        String ipv6Addr = setupSNAT(currentInterface, ipv6SNAT);
+                        String ipv6Addr = setupSNAT(currentInterface, ipv6TYPE.equals("SNAT"));
                         SharedPreferences.Editor edit = sharedPref.edit();
                         edit.putString("lastNetwork", currentInterface);
                         edit.putString("lastIPv6", ipv6Addr);
@@ -233,11 +235,11 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        natApplied = Script.configureTether(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Masquerading, ipv6SNAT, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz, configPath, functionPath);
-                        if (!natApplied || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                        natApplied = Script.configureTether(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6TYPE, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz, configPath, functionPath);
+                        if (!natApplied || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
-                                Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+                                Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                                 Script.unconfigureRNDIS(configPath);
                                 natApplied = false;
                             }
@@ -259,7 +261,7 @@ public class ForegroundService extends Service {
                         if (needsReset) {
                             Log.i("usbtether", "Restoring tether...");
                             // Update SNAT if needed
-                            String newAddr = setupSNAT(currentInterface, ipv6SNAT);
+                            String newAddr = setupSNAT(currentInterface, ipv6TYPE.equals("SNAT"));
                             if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
                                 Script.refreshSNAT(currentInterface, lastIPv6, newAddr);
                                 SharedPreferences.Editor edit = sharedPref.edit();
@@ -268,9 +270,9 @@ public class ForegroundService extends Service {
                             }
                             if (usbReconnect) {
                                 Script.unconfigureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix);
-                                if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6Masquerading, ipv6SNAT)) {
+                                if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
-                                    Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+                                    Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                                     Script.unconfigureRNDIS(configPath);
                                     natApplied = false;
                                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
@@ -395,23 +397,22 @@ public class ForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
 
         boolean hasTTL = Script.hasTTL();
+        boolean hasTPROXY = Script.hasTPROXY();
         boolean hasTable = Script.hasTable();
         boolean hasSNAT = Script.hasSNAT();
         boolean hasMASQUERADE = Script.hasMASQUERADE();
-        if (!hasTTL || !hasTable || !hasSNAT || !hasMASQUERADE) {
-            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            SharedPreferences.Editor edit = sharedPref.edit();
-            if (!hasTTL) {
-                edit.putBoolean("fixTTL", false);
-            }
-            if (!hasTable || !hasSNAT) {
-                edit.putBoolean("ipv6SNAT", false);
-            }
-            if (!hasTable || !hasMASQUERADE) {
-                edit.putBoolean("ipv6Masquerading", false);
-            }
-            edit.apply();
+
+        SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+        Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
+        SharedPreferences.Editor edit = sharedPref.edit();
+        if (fixTTL && !hasTTL) {
+            edit.putBoolean("fixTTL", false);
         }
+        if ((ipv6TYPE.equals("TPROXY") && !hasTPROXY) || (ipv6TYPE.equals("SNAT") && (!hasTable || !hasSNAT)) || (ipv6TYPE.equals("MASQUERADE") && (!hasTable || !hasMASQUERADE))) {
+            edit.putString("ipv6TYPE", "None");
+        }
+        edit.apply();
 
         String[] vars = Script.gadgetVars();
 
@@ -472,8 +473,7 @@ public class ForegroundService extends Service {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");
         String lastIPv6 = sharedPref.getString("lastIPv6", "");
-        Boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-        Boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+        String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
         Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         boolean dmz = sharedPref.getBoolean("dmz", false);
@@ -488,7 +488,7 @@ public class ForegroundService extends Service {
         }
 
         if (!lastNetwork.equals("")) {
-            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6Masquerading, ipv6SNAT, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+            Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
             Script.unconfigureRNDIS(configPath);
         }
 

@@ -48,6 +48,7 @@ import com.google.android.material.snackbar.Snackbar;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Inet4Address;
@@ -69,6 +70,9 @@ public class MainActivity extends AppCompatActivity {
         if (!tetherInterface.equals("Auto")) {
             arraySpinner.add("Auto");
         }
+        //if (!tetherInterface.equals("TPROXY")) {
+        //    arraySpinner.add("TPROXY");
+        //}
         Enumeration<NetworkInterface> nets;
         try {
             nets = NetworkInterface.getNetworkInterfaces();
@@ -120,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // FIXME - Build these dependencies as libraries and add them to the project
+        // Really though, this is getting stupid. Adding root services and bindings is not that difficult.
 
         File file = new File(getFilesDir().getPath() + "/dnsmasq.armeabi-v7a");
         if (!file.exists()) {
@@ -193,6 +198,115 @@ public class MainActivity extends AppCompatActivity {
         }
         file.setExecutable(true);
 
+        file = new File(getFilesDir().getPath() + "/hev-socks5-server.armeabi-v7a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.hevserver_arm)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/hev-socks5-server.arm64-v8a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.hevserver_arm64)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/hev-socks5-tproxy.armeabi-v7a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.hevtproxy_arm)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/hev-socks5-tproxy.arm64-v8a");
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(R.raw.hevtproxy_arm64)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+
+        file = new File(getFilesDir().getPath() + "/socks.yml");
+        if (!file.exists()) {
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.append("main:\n");
+                writer.append("  workers: 20\n");
+                writer.append("  port: 1080\n");
+                writer.append("  listen-address: '::1'\n");
+                writer.append("  listen-ipv6-only: false\n");
+                writer.append("  bind-address: '::'\n\n");
+                writer.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        file = new File(getFilesDir().getPath() + "/tproxy.yml");
+        if (!file.exists()) {
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.append("socks5:\n");
+                writer.append("  port: 1080\n");
+                writer.append("  address: ::1\n\n");
+                writer.append("tcp:\n");
+                writer.append("  port: 1088\n");
+                writer.append("  address: '::'\n\n");
+                writer.append("udp:\n");
+                writer.append("  port: 1088\n");
+                writer.append("  address: '::'\n\n");
+                writer.append("dns:\n");
+                writer.append("  port: 53\n");
+                writer.append("  address: '::'\n");
+                writer.append("  upstream: 8.8.8.8\n\n");
+                writer.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         TextView net_textview = findViewById(R.id.net_textview);
         Switch service_switch = findViewById(R.id.service_switch);
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
@@ -225,8 +339,7 @@ public class MainActivity extends AppCompatActivity {
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
         boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
-        boolean ipv6Masquerading = sharedPref.getBoolean("ipv6Masquerading", false);
-        boolean ipv6SNAT = sharedPref.getBoolean("ipv6SNAT", false);
+        String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         boolean dmz = sharedPref.getBoolean("dmz", false);
@@ -237,25 +350,23 @@ public class MainActivity extends AppCompatActivity {
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
 
         boolean hasTTL = Script.hasTTL();
+        boolean hasTPROXY = Script.hasTPROXY();
         boolean hasTable = Script.hasTable();
         boolean hasSNAT = Script.hasSNAT();
         boolean hasMASQUERADE = Script.hasMASQUERADE();
-        if (!hasTTL || !hasTable || !hasSNAT || !hasMASQUERADE) {
-            SharedPreferences.Editor edit = sharedPref.edit();
-            if (!hasTTL) {
-                fixTTL = false;
-                edit.putBoolean("fixTTL", false);
-            }
-            if (!hasTable || !hasSNAT) {
-                ipv6SNAT = false;
-                edit.putBoolean("ipv6SNAT", false);
-            }
-            if (!hasTable || !hasMASQUERADE) {
-                ipv6Masquerading =false;
-                edit.putBoolean("ipv6Masquerading", false);
-            }
-            edit.apply();
+
+        SharedPreferences.Editor edit = sharedPref.edit();
+        if (fixTTL && !hasTTL) {
+            fixTTL = false;
+            edit.putBoolean("fixTTL", fixTTL);
         }
+        if ((ipv6TYPE.equals("TPROXY") && !hasTPROXY) ||
+                (ipv6TYPE.equals("SNAT") && (!hasTable || !hasSNAT)) ||
+                (ipv6TYPE.equals("MASQUERADE") && (!hasTable || !hasMASQUERADE))) {
+            ipv6TYPE = "None";
+            edit.putString("ipv6TYPE", ipv6TYPE);
+        }
+        edit.apply();
 
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
@@ -275,25 +386,26 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<String> arraySpinner2 = new ArrayList<>();
         arraySpinner2.add("None");
+        if (hasTPROXY) {
+            arraySpinner2.add("TPROXY");
+        }
         if (hasTable) {
             if (hasSNAT) {
                 arraySpinner2.add("SNAT");
             }
             if (hasMASQUERADE) {
-                arraySpinner2.add("Masquerading");
+                arraySpinner2.add("MASQUERADE");
             }
         }
         ArrayAdapter<String> adapter2 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner2);
         adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         nat_spinner.setAdapter(adapter2);
-        int position = 0;
-        if (hasTable) {
-            if ( hasSNAT && ipv6SNAT) {
-                position = 1;
-            } else if (hasMASQUERADE && ipv6Masquerading) {
-                position = 2;
-            }
+
+        int position = arraySpinner2.indexOf(ipv6TYPE);
+        if (position < 0) {
+            position = 0;
         }
+
         nat_spinner.setSelection(position);
 
         ArrayList<String> arraySpinner3 = new ArrayList<>();
@@ -331,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
             interface_spinner.setEnabled(false);
         }
 
-        if (!ipv6Masquerading && !ipv6SNAT) {
+        if (ipv6TYPE.equals("None")) {
             prefix_layout.setVisibility(View.GONE);
         }
 
@@ -427,18 +539,11 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 Object item = adapterView.getItemAtPosition(position);
                 SharedPreferences.Editor edit = sharedPref.edit();
-                if (item.equals("Masquerading")) {
-                    edit.putBoolean("ipv6Masquerading", true);
-                    edit.putBoolean("ipv6SNAT", false);
-                    prefix_layout.setVisibility(View.VISIBLE);
-                } else if (item.equals("SNAT")) {
-                    edit.putBoolean("ipv6Masquerading", false);
-                    edit.putBoolean("ipv6SNAT", true);
-                    prefix_layout.setVisibility(View.VISIBLE);
-                } else {
-                    edit.putBoolean("ipv6Masquerading", false);
-                    edit.putBoolean("ipv6SNAT", false);
+                edit.putString("ipv6TYPE", item.toString());
+                if (item.equals("None")) {
                     prefix_layout.setVisibility(View.GONE);
+                } else {
+                    prefix_layout.setVisibility(View.VISIBLE);
                 }
                 edit.apply();
             }

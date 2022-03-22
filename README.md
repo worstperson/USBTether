@@ -126,3 +126,5 @@ Be sure to set your preferred DNS servers as appropriate:
 
  - dnsmasq - https://github.com/worstperson/dnsmasq
  - tpws - https://github.com/bol-van/zapret
+ - hev-socks5-server - https://github.com/heiher/hev-socks5-server
+ - hev-socks5-tproxy - https://github.com/heiher/hev-socks5-tproxy
