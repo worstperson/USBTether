@@ -32,7 +32,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -290,13 +289,13 @@ public class MainActivity extends AppCompatActivity {
             try (FileWriter writer = new FileWriter(file)) {
                 writer.append("socks5:\n");
                 writer.append("  port: 1080\n");
-                writer.append("  address: ::1\n\n");
+                writer.append("  address: '::1'\n\n");
                 writer.append("tcp:\n");
                 writer.append("  port: 1088\n");
-                writer.append("  address: '::'\n\n");
+                writer.append("  address: '::1'\n\n");
                 writer.append("udp:\n");
                 writer.append("  port: 1088\n");
-                writer.append("  address: '::'\n\n");
+                writer.append("  address: '::1'\n\n");
                 writer.append("dns:\n");
                 writer.append("  port: 53\n");
                 writer.append("  address: '::'\n");
@@ -358,7 +357,7 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor edit = sharedPref.edit();
         if (fixTTL && !hasTTL) {
             fixTTL = false;
-            edit.putBoolean("fixTTL", fixTTL);
+            edit.putBoolean("fixTTL", false);
         }
         if ((ipv6TYPE.equals("TPROXY") && !hasTPROXY) ||
                 (ipv6TYPE.equals("SNAT") && (!hasTable || !hasSNAT)) ||

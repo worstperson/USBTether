@@ -67,11 +67,14 @@ public class ForegroundService extends Service {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setSilent(true);
+
     final Handler handler = new Handler(Looper.getMainLooper());
     Runnable delayedRestore = new Runnable() {
         @Override
         public void run() {
-            restoreTether();
+            if (isStarted) {
+                restoreTether();
+            }
         }
     };
 
@@ -169,7 +172,7 @@ public class ForegroundService extends Service {
             }
 
             String currentInterface = pickInterface(tetherInterface);
-            NetworkInterface checkInterface = null;
+            NetworkInterface checkInterface;
             boolean isUp = false;
             try {
                 checkInterface = NetworkInterface.getByName(currentInterface);
@@ -235,8 +238,8 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        natApplied = Script.configureTether(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6TYPE, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz, configPath, functionPath);
-                        if (!natApplied || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
+                        if (!(natApplied = Script.configureTether(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6TYPE, ipv6Prefix, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz))
+                                || !Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
                                 Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
@@ -250,6 +253,7 @@ public class ForegroundService extends Service {
                                 mNotificationManager.notify(1, notification.build());
                             }
                         } else {
+                            // Start bound services
                             if (dpiCircumvention) {
                                 Script.startTPWS(ipv4Addr, ipv6Prefix, getFilesDir().getPath());
                             }
@@ -282,6 +286,7 @@ public class ForegroundService extends Service {
                                         mNotificationManager.notify(1, notification.build());
                                     }
                                 } else {
+                                    // Start bound services
                                     if (dpiCircumvention) {
                                         Script.startTPWS(ipv4Addr, ipv6Prefix, getFilesDir().getPath());
                                     }
@@ -360,6 +365,8 @@ public class ForegroundService extends Service {
                     needsReset = true;
                     usbReconnect = true;
                 }
+                // Stop bound services
+                Script.stopTPWS();
                 if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                     Log.i("usbtether", "USB Disconnected, removing tether restore callback");
                     handler.removeCallbacks(delayedRestore);
@@ -403,7 +410,7 @@ public class ForegroundService extends Service {
         boolean hasMASQUERADE = Script.hasMASQUERADE();
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
         SharedPreferences.Editor edit = sharedPref.edit();
         if (fixTTL && !hasTTL) {
