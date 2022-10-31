@@ -460,7 +460,7 @@ public class Script {
     }
 
     static Boolean testConnection(String tetherInterface) {
-        if (Shell.cmd("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+        if (Shell.cmd("ping -c 1 -I " + tetherInterface + " 1.1.1.1").exec().isSuccess() || Shell.cmd("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv4 is online");
             return true;
         }
@@ -469,7 +469,7 @@ public class Script {
     }
 
     static Boolean testConnection6(String tetherInterface) {
-        if (Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
+        if (Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2606:4700:4700::1111").exec().isSuccess() || Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv6 is online");
             return true;
         }
@@ -500,5 +500,43 @@ public class Script {
     static void stopCloudflare1111Warp() {
         Log.w("USBTether", "Stopping Cloudflare 1.1.1.1 Warp");
         shellCommand("am force-stop com.cloudflare.onedotonedotonedotone");
+    }
+
+    static boolean isTethering() {
+        return Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess();
+    }
+
+    static void recoverDataConnection() {
+        Log.w("USBTether", "Restarting mobile data");
+        // get current id, mcc, mnc
+        String[] parts = new String[0];
+        Shell.Result command = Shell.cmd("content query --uri content://telephony/carriers/current --projection _id:mcc:mnc | awk -F '[=,]' '{print $2,$4,$6}'").exec();
+        if ( command.isSuccess() ) {
+            for (String result : command.getOut()) {
+                parts = result.split(" ");
+                break;
+            }
+            if ( parts.length == 3) {
+                // insert dummy apn
+                shellCommand("content insert --uri content://telephony/carriers --bind name:s:usbt_dummy --bind numeric:s:" + parts[1] + parts[2] + " --bind mcc:s:" + parts[1] + " --bind mnc:s:" + parts[2] + " --bind type:s:default --bind current:s:1 --bind apn:s:test --bind edited:s:1");
+                // get dummy id
+                command = Shell.cmd("content query --uri content://telephony/carriers --where \"name='usbt_dummy'\" --projection _id | awk -F '=' '{print $2}'").exec();
+                if ( command.isSuccess() ) {
+                    String id = command.getOut().get(0);
+                    // select dummy apn
+                    shellCommand("content insert --uri content://telephony/carriers/preferapn --bind apn_id:i:" + id);
+                    // restart data
+                    shellCommand("svc data disable");
+                    shellCommand("svc data enable");
+                    // select preferred apn
+                    shellCommand("content insert --uri content://telephony/carriers/preferapn --bind apn_id:i:" + parts[0]);
+                    // restart data again
+                    shellCommand("svc data disable");
+                    shellCommand("svc data enable");
+                }
+                // delete dummy apn
+                shellCommand("content delete --uri content://telephony/carriers --where \"name='usbt_dummy'\"");
+            }
+        }
     }
 }

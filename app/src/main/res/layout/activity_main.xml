@@ -340,6 +340,29 @@
                     android:maxLines="1" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/cell_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/bandwidth_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Cellular Watchdog:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Switch
+                    android:id="@+id/cell_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
+
         </RelativeLayout>
 
     </ScrollView>

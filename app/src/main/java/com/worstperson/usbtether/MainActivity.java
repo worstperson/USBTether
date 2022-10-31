@@ -312,6 +312,7 @@ public class MainActivity extends AppCompatActivity {
         Switch ttl_switch = findViewById(R.id.ttl_switch);
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch dmz_switch = findViewById(R.id.dmz_switch);
+        Switch cell_switch = findViewById(R.id.cell_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
@@ -347,6 +348,7 @@ public class MainActivity extends AppCompatActivity {
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
+        boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
         boolean hasTTL = Script.hasTTL();
         boolean hasTPROXY = Script.hasTPROXY();
@@ -372,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
         ttl_switch.setChecked(fixTTL);
         dpi_switch.setChecked(dpiCircumvention);
         dmz_switch.setChecked(dmz);
+        cell_switch.setChecked(cellularWatchdog);
 
         if (!hasTTL) {
             ttl_switch.setEnabled(false);
@@ -431,6 +434,7 @@ public class MainActivity extends AppCompatActivity {
             ttl_switch.setEnabled(false);
             dpi_switch.setEnabled(false);
             dmz_switch.setEnabled(false);
+            cell_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -459,6 +463,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 dpi_switch.setEnabled(!isChecked);
                 dmz_switch.setEnabled(!isChecked);
+                cell_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
                 wg_text.setEnabled(!isChecked);
                 bandwidth_text.setEnabled(!isChecked);
@@ -516,6 +521,15 @@ public class MainActivity extends AppCompatActivity {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("dmz", isChecked);
+                edit.apply();
+            }
+        });
+
+        cell_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("cellularWatchdog", isChecked);
                 edit.apply();
             }
         });
@@ -674,6 +688,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView net_textview = findViewById(R.id.net_textview);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
+        EditText ipv4_text = findViewById(R.id.ipv4_text);
 
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (connectivityManager != null) {
@@ -689,7 +704,9 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
+        String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
 
         setInterfaceSpinner(tetherInterface, interface_spinner);
+        ipv4_text.setText(ipv4Addr);
     }
 }

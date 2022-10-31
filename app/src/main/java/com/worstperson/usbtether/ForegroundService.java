@@ -28,6 +28,7 @@ import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -77,6 +78,50 @@ public class ForegroundService extends Service {
             }
         }
     };
+
+    final Handler handler2 = new Handler(Looper.getMainLooper());
+    Runnable checkCellular = new Runnable() {
+        @Override
+        public void run() {
+            if (isStarted && Script.isTethering()) {
+                Log.i("usbtether", "Checking cellular connection...");
+                String iface = isCellularActive();
+                if (iface != null) {
+                    if (!Script.testConnection(iface)) {
+                        Log.i("usbtether", "Cellular connection is DOWN, attempting recovery");
+                        Script.recoverDataConnection();
+                    } else {
+                        Log.i("usbtether", "Cellular connection is UP");
+                    }
+                } else {
+                    Log.i("usbtether", "Cellular connection is not active");
+                }
+                if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
+                    Log.i("usbtether", "Checking cellular connection in 60 seconds...");
+                    handler2.postDelayed(checkCellular, 60000);
+                }
+            }
+        }
+    };
+
+    private String isCellularActive() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        Network[] networks = cm.getAllNetworks();
+        String mobileNetwork = null;
+        for (Network network : networks) {
+            NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+            if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)) {
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                    mobileNetwork = cm.getLinkProperties(network).getInterfaceName();
+                } else if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                    return null;
+                }
+            }
+        }
+        return mobileNetwork;
+    }
 
     private String pickInterface(String tetherInterface) {
         if (tetherInterface.equals("Auto")) {
@@ -148,6 +193,7 @@ public class ForegroundService extends Service {
         NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
         if (Script.isUSBConfigured()) {
+
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
             //if (tetherInterface.equals("TPROXY")) { //TODO - ADD SUPPORT FOR THIS
@@ -166,9 +212,17 @@ public class ForegroundService extends Service {
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
+            boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
             String ipv4Prefix = "";
             if (isXLAT) {
                 ipv4Prefix = "v4-";
+            }
+
+            if (cellularWatchdog) {
+                if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
+                    Log.i("usbtether", "Checking cellular connection in 60 seconds...");
+                    handler2.postDelayed(checkCellular, 60000);
+                }
             }
 
             String currentInterface = pickInterface(tetherInterface);
@@ -476,6 +530,10 @@ public class ForegroundService extends Service {
         if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
             handler.removeCallbacks(delayedRestore);
         }
+        if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
+            handler2.removeCallbacks(checkCellular);
+        }
+
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String lastNetwork = sharedPref.getString("lastNetwork", "");

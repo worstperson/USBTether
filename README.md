@@ -7,20 +7,25 @@ USB Tether is an application to automatically manage and maintain a tethered con
  - Does not require APN modification to avoid classification
  - Built-in dnsmasq with support for DHCP, DHCP6, and SLAAC
  - Ability to set the IPv4 address (and /24 subnet)
- - IPv6 NAT supporting both Masquerading and SNAT
+ - IPv6 NAT supporting both Masquerading, SNAT, and TPROXY
  - IPv6 Prefix selection to set IPv6 priority
  - TTL/HL modification to make all packets look like they came from your device
  - DPI Circumvention for bypassing traffic throttling
  - VPN Autostart support to ensure your VPN stays connected
  - IP-based bandwidth control to help manage larger networks
+ - Cellular watchdog to detect and fix broken cellular connections
 
 ## Kernel Prerequisites:
 
-Some features require your kernel to be compiled with specific options to be usable. This is up to you or your kernel maintainer to enable them at compile time. Distros Like Lineage OS will have none of these enabled by default, requiring you to obtain the sources and recompile the kernel yourself. You can either rebuild and flash the entire kernel or just build the modules and insmod them on startup.
+Some features require your kernel to be compiled with specific options to be usable. This is up to you or your kernel maintainer to enable them at compile time. Distros Like Lineage OS may have none of these enabled by default, requiring you to obtain the sources and recompile the kernel yourself. You can either rebuild and flash the entire kernel or just build the modules and insmod them on startup.
 
 #### For Modify TTL/HL:
 
 - CONFIG_NETFILTER_XT_TARGET_HL - modify TTL and HL hoplimit
+
+#### For IPv6 TPROXY:
+
+- NETFILTER_XT_TARGET_TPROXY - tproxy target support
 
 #### For IPv6 SNAT:
 
@@ -116,10 +121,9 @@ Be sure to set your preferred DNS servers as appropriate:
 ## TODO:
 
  - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
- - **Port Forwarding** - UPnP and NAT-PMP are unlikely, but mappings and DMZ are possible. Probably will only work with IPv6 on mobile networks, if at all. Maybe it's possible to use these services on a bridged router? Is port forwarding through a VPN worth it?
- - **Traffic Shaping** - Using the firewall to limit bandwidth works well enough, but it would be nice to have QoS via tc as an option too. QoS can be ran on the bridge as well and is preferred.
  - **DNSMasq Watchdog** - We should have a process that watches over DNSMasq and restarts it when killed.
- - **VPN Watchdog** - We should have a periodic check that traffic can pass the tunnel and restart it if it can't.
+ - **VPN Watchdog** - We should have a periodic check that traffic can pass the tunnel.
+ - **Downstream Watchdog** - We should have a periodic check that traffic can pass to a downstream router or server.
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 
 ## DEPENDENCIES:
