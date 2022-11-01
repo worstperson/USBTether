@@ -205,21 +205,24 @@ public class Script {
                 shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
             }
         } else if (ipv6TYPE.equals("TPROXY")) {
-            //shellCommand("ip6tables -t mangle -A PREROUTING -d fd00::1 -p udp --dport 53 -j TPROXY --on-port 1088 --tproxy-mark 1088");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d :: -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d ::1 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d ::ffff:0:0:0/96 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 64:ff9b::/96 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 100::/64 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 2001::/32 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 2001:20::/28 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 2001:db8::/32 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d 2002::/16 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d fc00::/7 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d fe80::/10 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -d ff00::/8 -j RETURN");
-            shellCommand("ip6tables -t mangle -A PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
-            shellCommand("ip6tables -t mangle -A PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
+            shellCommand("ip6tables -t mangle -N TPROXY_ROUTE_PREROUTING");
+            shellCommand("ip6tables -t mangle -A PREROUTING -j TPROXY_ROUTE_PREROUTING");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d :: -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d ::1 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d ::ffff:0:0:0/96 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 64:ff9b::/96 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 100::/64 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 2001::/32 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 2001:20::/28 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 2001:db8::/32 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d 2002::/16 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d fc00::/7 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d fe80::/10 -j RETURN");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -d ff00::/8 -j RETURN");
+            shellCommand("ip6tables -t mangle -N TPROXY_MARK_PREROUTING");
+            shellCommand("ip6tables -t mangle -A TPROXY_ROUTE_PREROUTING -j TPROXY_MARK_PREROUTING");
+            shellCommand("ip6tables -t mangle -A TPROXY_MARK_PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
+            shellCommand("ip6tables -t mangle -A TPROXY_MARK_PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
             shellCommand("ip -6 rule add fwmark 1088 table 999");
             shellCommand("ip -6 route add local default dev lo table 999");
         }
@@ -246,20 +249,12 @@ public class Script {
             shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -m state --state INVALID -j DROP");
             shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
         } else if (ipv6TYPE.equals("TPROXY")) {
-            shellCommand("ip6tables -t mangle -D PREROUTING -d :: -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d ::1 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d ::ffff:0:0:0/96 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 64:ff9b::/96 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 100::/64 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 2001::/32 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 2001:20::/28 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 2001:db8::/32 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d 2002::/16 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d fc00::/7 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d fe80::/10 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -d ff00::/8 -j RETURN");
-            shellCommand("ip6tables -t mangle -D PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
-            shellCommand("ip6tables -t mangle -D PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
+            shellCommand("ip6tables -t mangle -D TPROXY_ROUTE_PREROUTING -j TPROXY_MARK_PREROUTING");
+            shellCommand("ip6tables -t mangle -F TPROXY_MARK_PREROUTING");
+            shellCommand("ip6tables -t mangle -X TPROXY_MARK_PREROUTING");
+            shellCommand("ip6tables -t mangle -D PREROUTING -j TPROXY_ROUTE_PREROUTING");
+            shellCommand("ip6tables -t mangle -F TPROXY_ROUTE_PREROUTING");
+            shellCommand("ip6tables -t mangle -X TPROXY_ROUTE_PREROUTING");
             shellCommand("ip -6 rule delete fwmark 1088 table 999");
             shellCommand("ip -6 route delete local default dev lo table 999");
         }
@@ -371,7 +366,7 @@ public class Script {
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
                     shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
-                } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 proxying seems unsupported or maybe broken
+                } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
                     shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
                     shellCommand(appData + "/dnsmasq." + Build.SUPPORTED_ABIS[0] + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
@@ -384,9 +379,15 @@ public class Script {
             if (dpiCircumvention) {
                 shellCommand("iptables -t nat -I PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
                 shellCommand("iptables -t nat -I PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
-                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Not supported by TPROXY
+                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
                     shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
                     shellCommand("ip6tables -t nat -I PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                } else if (ipv6TYPE.equals("TPROXY")) {
+                    // Huh, only need the IP_TRANSPARENT patch for IPv4?
+                    shellCommand("ip6tables -t mangle -I TPROXY_MARK_PREROUTING -p tcp --dport 80 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
+                    shellCommand("ip6tables -t mangle -I TPROXY_MARK_PREROUTING -p tcp --dport 443 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
+                    shellCommand("ip -6 rule add fwmark 8123 table 998");
+                    shellCommand("ip -6 route add local default dev lo table 998");
                 }
             }
             if (dmz) {
@@ -415,8 +416,13 @@ public class Script {
             shellCommand("killall \"tpws." + Build.SUPPORTED_ABIS[0] + "\"");
             shellCommand("iptables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
             shellCommand("iptables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
-            shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-            shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+            } else if (ipv6TYPE.equals("TPROXY")) {
+                shellCommand("ip -6 rule delete fwmark 8123 table 998");
+                shellCommand("ip -6 route delete local default dev lo table 998");
+            }
         }
         if ( Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
             Log.i("USBTether", "Restoring tether interface state");
@@ -436,9 +442,6 @@ public class Script {
             Log.w("USBTether", "Tether interface not configured");
         }
     }
-
-    // TODO: bind to a software bridge instead of rndis0
-    // Would solve the issue of bound services, indirectly solve the rndis route clearing bug, and speed up USB event handling.
 
     static void startTPWS(String ipv4Addr, String ipv6Prefix, String appData) {
         //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
@@ -500,10 +503,6 @@ public class Script {
     static void stopCloudflare1111Warp() {
         Log.w("USBTether", "Stopping Cloudflare 1.1.1.1 Warp");
         shellCommand("am force-stop com.cloudflare.onedotonedotonedotone");
-    }
-
-    static boolean isTethering() {
-        return Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess();
     }
 
     static void recoverDataConnection() {
