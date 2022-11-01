@@ -89,7 +89,7 @@ public class ForegroundService extends Service {
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
-            if (isStarted && Script.isTethering()) {
+            if (isStarted && Script.isUSBConfigured()) {
                 Log.w("usbtether", "Checking connection availability...");
                 String iface;
                 if (cellularWatchdog && (iface = isCellularActive()) != null && !(Script.testConnection(iface) || Script.testConnection6(iface))) {
