@@ -80,25 +80,40 @@ public class ForegroundService extends Service {
     };
 
     final Handler handler2 = new Handler(Looper.getMainLooper());
-    Runnable checkCellular = new Runnable() {
+    Runnable checkConnection = new Runnable() {
         @Override
         public void run() {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            String lastNetwork = sharedPref.getString("lastNetwork", "");
+            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+            boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
+
             if (isStarted && Script.isTethering()) {
-                Log.i("usbtether", "Checking cellular connection...");
-                String iface = isCellularActive();
-                if (iface != null) {
-                    if (!Script.testConnection(iface)) {
-                        Log.i("usbtether", "Cellular connection is DOWN, attempting recovery");
-                        Script.recoverDataConnection();
-                    } else {
-                        Log.i("usbtether", "Cellular connection is UP");
-                    }
-                } else {
-                    Log.i("usbtether", "Cellular connection is not active");
+                Log.w("usbtether", "Checking connection availability...");
+                String iface;
+                if (cellularWatchdog && (iface = isCellularActive()) != null && !(Script.testConnection(iface) || Script.testConnection6(iface))) {
+                    Log.i("usbtether", "Cellular connection is DOWN, attempting recovery");
+                    Script.recoverDataConnection();
+                    needsReset = true;
+                } else if (autostartVPN > 0 && !Script.testConnection(lastNetwork)) {
+                    Log.i("usbtether", "VPN connection is DOWN, attempting recovery");
+                    startVPN(autostartVPN, wireguardProfile, true);
+                    needsReset = true;
                 }
-                if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
-                    Log.i("usbtether", "Checking cellular connection in 60 seconds...");
-                    handler2.postDelayed(checkCellular, 60000);
+                if (needsReset) {
+                    Log.w("usbtether", "Scheduling tether restore");
+                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                        Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
+                        handler.postDelayed(delayedRestore, 5000);
+                        notification.setContentTitle("Service is running, waiting 5 seconds...");
+                        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                        mNotificationManager.notify(1, notification.build());
+                    }
+                }
+                if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
+                    Log.i("usbtether", "Checking connection in 60 seconds...");
+                    handler2.postDelayed(checkConnection, 60000);
                 }
             }
         }
@@ -218,10 +233,10 @@ public class ForegroundService extends Service {
                 ipv4Prefix = "v4-";
             }
 
-            if (cellularWatchdog) {
-                if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
-                    Log.i("usbtether", "Checking cellular connection in 60 seconds...");
-                    handler2.postDelayed(checkCellular, 60000);
+            if (autostartVPN > 0 || cellularWatchdog) {
+                if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
+                    Log.i("usbtether", "Checking connection in 60 seconds...");
+                    handler2.postDelayed(checkConnection, 60000);
                 }
             }
 
@@ -530,8 +545,8 @@ public class ForegroundService extends Service {
         if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
             handler.removeCallbacks(delayedRestore);
         }
-        if (!HandlerCompat.hasCallbacks(handler2, checkCellular)) {
-            handler2.removeCallbacks(checkCellular);
+        if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
+            handler2.removeCallbacks(checkConnection);
         }
 
 
