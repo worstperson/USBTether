@@ -427,7 +427,7 @@ public class Script {
                 shellCommand("ip -6 route delete local default dev lo table 998");
             }
         }
-        if ( !new File(appData + "/.configured").exists() ) {
+        if ( new File(appData + "/.configured").exists() ) {
             Log.i("USBTether", "Restoring tether interface state");
             if (Integer.parseInt(clientBandwidth) > 0) {
                 shellCommand("iptables -D FORWARD -i " + ipv4Interface + "  -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
