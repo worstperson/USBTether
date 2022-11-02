@@ -20,6 +20,9 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
+import java.io.File;
+import java.io.IOException;
+
 public class Script {
 
     static {
@@ -297,8 +300,8 @@ public class Script {
         }
     }
 
-    static void configureRNDIS(String gadgetPath, String configPath, String functionPath) {
-        if ( !Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
+    static void configureRNDIS(String gadgetPath, String configPath, String functionPath, String appData) {
+        if ( !new File(appData + "/.configured").exists() ) {
             if (configPath == null) {
                 shellCommand("setprop sys.usb.config rndis,adb");
                 shellCommand("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done");
@@ -311,14 +314,14 @@ public class Script {
                 shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             }
-            shellCommand("setprop sys.usb.usbtether true");
+            try { new File(appData + "/.configured").createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         } else {
             Log.w("USBTether", "Tether interface already configured?!?");
         }
     }
 
-    static void unconfigureRNDIS(String configPath) {
-        shellCommand("setprop sys.usb.usbtether false");
+    static void unconfigureRNDIS(String configPath, String appData) {
+        new File(appData + "/.configured").delete();
         if (configPath == null) {
             shellCommand("setprop sys.usb.config adb");
         } else {
@@ -424,7 +427,7 @@ public class Script {
                 shellCommand("ip -6 route delete local default dev lo table 998");
             }
         }
-        if ( Shell.cmd("[ \"$(getprop sys.usb.usbtether)\" = \"true\" ]").exec().isSuccess() ) {
+        if ( !new File(appData + "/.configured").exists() ) {
             Log.i("USBTether", "Restoring tether interface state");
             if (Integer.parseInt(clientBandwidth) > 0) {
                 shellCommand("iptables -D FORWARD -i " + ipv4Interface + "  -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");

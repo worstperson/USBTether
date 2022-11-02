@@ -312,7 +312,7 @@ public class ForegroundService extends Service {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
                                 Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                Script.unconfigureRNDIS(configPath);
+                                Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
                                 natApplied = false;
                             }
                             if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
@@ -346,7 +346,7 @@ public class ForegroundService extends Service {
                                 if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
                                     Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                    Script.unconfigureRNDIS(configPath);
+                                    Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
                                     natApplied = false;
                                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
@@ -477,7 +477,6 @@ public class ForegroundService extends Service {
         boolean hasTable = Script.hasTable();
         boolean hasSNAT = Script.hasSNAT();
         boolean hasMASQUERADE = Script.hasMASQUERADE();
-
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
@@ -520,7 +519,7 @@ public class ForegroundService extends Service {
         notification.setContentTitle("Service is running, USB disconnected");
         startForeground(1, notification.build());
 
-        Script.configureRNDIS(gadgetPath, configPath, functionPath);
+        Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
@@ -569,7 +568,7 @@ public class ForegroundService extends Service {
 
         if (!lastNetwork.equals("")) {
             Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-            Script.unconfigureRNDIS(configPath);
+            Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
         }
 
         natApplied = false;
