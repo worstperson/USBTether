@@ -306,8 +306,8 @@ public class Script {
                 shellCommand("setprop sys.usb.config rndis,adb");
                 shellCommand("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done");
             } else {
-                shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
-                shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
+                //shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
+                //shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
                 shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
                 //Do it again?
