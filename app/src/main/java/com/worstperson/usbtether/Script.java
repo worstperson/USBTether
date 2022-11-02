@@ -466,7 +466,7 @@ public class Script {
     }
 
     static Boolean testConnection(String tetherInterface) {
-        if (Shell.cmd("ping -c 1 -I " + tetherInterface + " 1.1.1.1").exec().isSuccess() || Shell.cmd("ping -c 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
+        if (Shell.cmd("ping -c 1 -w 1 -I " + tetherInterface + " 1.1.1.1").exec().isSuccess() || Shell.cmd("ping -c 1 -w 1 -I " + tetherInterface + " 8.8.8.8").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv4 is online");
             return true;
         }
@@ -475,7 +475,7 @@ public class Script {
     }
 
     static Boolean testConnection6(String tetherInterface) {
-        if (Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2606:4700:4700::1111").exec().isSuccess() || Shell.cmd("ping6 -c 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
+        if (Shell.cmd("ping6 -c 1 -w 1 -I " + tetherInterface + " 2606:4700:4700::1111").exec().isSuccess() || Shell.cmd("ping6 -c 1 -w 1 -I " + tetherInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
             Log.i("usbtether", tetherInterface + " IPv6 is online");
             return true;
         }
