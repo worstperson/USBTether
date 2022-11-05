@@ -25,6 +25,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.hardware.usb.UsbManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -40,6 +41,7 @@ import android.widget.Toast;
 import androidx.core.os.HandlerCompat;
 import androidx.core.app.NotificationCompat;
 
+import java.lang.reflect.Method;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -312,7 +314,7 @@ public class ForegroundService extends Service {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
                                 Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
+                                Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
                                 natApplied = false;
                             }
                             if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
@@ -346,7 +348,7 @@ public class ForegroundService extends Service {
                                 if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
                                     Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                    Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
+                                    Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
                                     natApplied = false;
                                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
@@ -524,6 +526,14 @@ public class ForegroundService extends Service {
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 
+        /*if (Script.isUSBConfigured()) {
+            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            Log.i("usbtether", "Creating callback to restore tether in 10 seconds...");
+            handler.postDelayed(delayedRestore, 10000);
+            notification.setContentTitle("Service is running, waiting 10 seconds...");
+            mNotificationManager.notify(1, notification.build());
+        }*/
+
         return Service.START_STICKY;
     }
 
@@ -568,7 +578,7 @@ public class ForegroundService extends Service {
 
         if (!lastNetwork.equals("")) {
             Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-            Script.unconfigureRNDIS(configPath, getFilesDir().getPath());
+            Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
         }
 
         natApplied = false;

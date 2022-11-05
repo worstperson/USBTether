@@ -16,12 +16,14 @@
 
 package com.worstperson.usbtether;
 
+import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 public class Script {
 
@@ -277,42 +279,62 @@ public class Script {
     // IPv4 protocol and clients will not know to request forwards.
     //
     static private void configureDMZ(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE) {
+        String prefix = "natctrl";
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            prefix = "tetherctrl";
+        }
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         shellCommand("iptables -t nat -A PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
         shellCommand("iptables -t nat -A PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
-        shellCommand("iptables -I tetherctrl_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        shellCommand("iptables -I " + prefix + "_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
             shellCommand("ip6tables -t nat -A PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
             shellCommand("ip6tables -t nat -A PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
-            shellCommand("ip6tables -I tetherctrl_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+            shellCommand("ip6tables -I " + prefix + "_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         }
     }
 
     static private void unconfigureDMZ(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE) {
+        String prefix = "natctrl";
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            prefix = "tetherctrl";
+        }
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         shellCommand("iptables -t nat -D PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
         shellCommand("iptables -t nat -D PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
-        shellCommand("iptables -D tetherctrl_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        shellCommand("iptables -D " + prefix + "_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
             shellCommand("ip6tables -t nat -D PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
             shellCommand("ip6tables -t nat -D PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
-            shellCommand("ip6tables -D tetherctrl_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+            shellCommand("ip6tables -D " + prefix + "_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         }
     }
 
     static void configureRNDIS(String gadgetPath, String configPath, String functionPath, String appData) {
-        if ( !new File(appData + "/.configured").exists() ) {
+        if ( !new File(appData + "/.configured").exists()) {
+                //!Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"rndis\"* ] || [ -d " + configPath + "/usbtether ]").exec().isSuccess()) {
             if (configPath == null) {
-                shellCommand("setprop sys.usb.config rndis,adb");
-                shellCommand("until [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; do sleep 1; done");
+                if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                    shellCommand("setprop sys.usb.config rndis,adb");
+                } else {
+                    shellCommand("setprop sys.usb.config rndis");
+                }
+                shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
             } else {
+                if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                    shellCommand("echo \"rndis_adb\" > " + configPath + "/strings/0x409/configuration");
+                } else {
+                    shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
+                }
+                //shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+                //shellCommand("svc usb resetUsbGadget");
                 //shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
                 //shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
-                shellCommand("unlink " + configPath + "/usbtether");
                 shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
                 //Do it again?
-                shellCommand("unlink " + configPath + "/usbtether");
-                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+                //shellCommand("unlink " + configPath + "/usbtether");
+                //shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+                shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
             }
             try { new File(appData + "/.configured").createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         } else {
@@ -320,13 +342,23 @@ public class Script {
         }
     }
 
-    static void unconfigureRNDIS(String configPath, String appData) {
-        new File(appData + "/.configured").delete();
+    static void unconfigureRNDIS(String gadgetPath, String configPath, String appData) {
         if (configPath == null) {
-            shellCommand("setprop sys.usb.config adb");
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config adb");
+            } else {
+                shellCommand("setprop sys.usb.config none");
+            }
         } else {
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
+            } else {
+                shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
+            }
             shellCommand("unlink " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
+        new File(appData + "/.configured").delete();
     }
 
     static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6TYPE, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, String configPath, String functionPath) {
