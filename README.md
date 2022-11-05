@@ -9,11 +9,12 @@ USB Tether is an application to automatically manage and maintain a tethered con
  - Ability to set the IPv4 address (and /24 subnet)
  - IPv6 NAT supporting both Masquerading, SNAT, and TPROXY
  - IPv6 Prefix selection to set IPv6 priority
- - TTL/HL modification to make all packets look like they came from your device
+ - TTL/HL modification to make packets look like they came from your device
  - DPI Circumvention for bypassing traffic throttling
- - VPN Autostart support to ensure your VPN stays connected
+ - VPN Autostart and watchdog support to ensure your VPN stays connected
  - IP-based bandwidth control to help manage larger networks
  - Cellular watchdog to detect and fix broken cellular connections
+ - Watchdog for restarting crashed services
 
 ## Kernel Prerequisites:
 
@@ -121,8 +122,6 @@ Be sure to set your preferred DNS servers as appropriate:
 ## TODO:
 
  - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
- - **DNSMasq Watchdog** - We should have a process that watches over DNSMasq and restarts it when killed.
- - **VPN Watchdog** - We should have a periodic check that traffic can pass the tunnel.
  - **Downstream Watchdog** - We should have a periodic check that traffic can pass to a downstream router or server.
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 

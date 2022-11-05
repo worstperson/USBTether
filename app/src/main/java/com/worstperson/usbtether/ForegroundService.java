@@ -25,7 +25,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.hardware.usb.UsbManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -41,7 +40,6 @@ import android.widget.Toast;
 import androidx.core.os.HandlerCompat;
 import androidx.core.app.NotificationCompat;
 
-import java.lang.reflect.Method;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -82,24 +80,29 @@ public class ForegroundService extends Service {
     };
 
     final Handler handler2 = new Handler(Looper.getMainLooper());
-    Runnable checkConnection = new Runnable() {
+    Runnable watchdog = new Runnable() {
         @Override
         public void run() {
             SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
             String lastNetwork = sharedPref.getString("lastNetwork", "");
+            String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
+            boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
+            Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
+            String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
+            String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
             int autostartVPN = sharedPref.getInt("autostartVPN", 0);
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
             if (isStarted && Script.isUSBConfigured()) {
-                Log.w("usbtether", "Checking connection availability...");
+                Log.i("usbtether", "Checking connection availability...");
                 String iface;
                 if (cellularWatchdog && (iface = isCellularActive()) != null && !(Script.testConnection(iface) || Script.testConnection6(iface))) {
-                    Log.i("usbtether", "Cellular connection is DOWN, attempting recovery");
+                    Log.w("usbtether", "Cellular connection is DOWN, attempting recovery");
                     Script.recoverDataConnection();
                     needsReset = true;
                 } else if (autostartVPN > 0 && !Script.testConnection(lastNetwork)) {
-                    Log.i("usbtether", "VPN connection is DOWN, attempting recovery");
+                    Log.w("usbtether", "VPN connection is DOWN, attempting recovery");
                     startVPN(autostartVPN, wireguardProfile, true);
                     needsReset = true;
                 }
@@ -113,9 +116,11 @@ public class ForegroundService extends Service {
                         mNotificationManager.notify(1, notification.build());
                     }
                 }
-                if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
-                    Log.i("usbtether", "Checking connection in 60 seconds...");
-                    handler2.postDelayed(checkConnection, 60000);
+                Log.i("usbtether", "Checking processes...");
+                Script.checkProcesses(ipv4Addr, ipv6TYPE, ipv6Prefix, dnsmasq, getFilesDir().getPath(), dpiCircumvention);
+                if (!HandlerCompat.hasCallbacks(handler2, watchdog)) {
+                    Log.i("usbtether", "Running watchdog in 60 seconds...");
+                    handler2.postDelayed(watchdog, 60000);
                 }
             }
         }
@@ -203,6 +208,28 @@ public class ForegroundService extends Service {
         }
     }
 
+    private String getPrefix(String iface, String ipv6Prefix) {
+        try {
+            NetworkInterface netint = NetworkInterface.getByName(iface);
+            if (netint != null) {
+                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                    if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress() && inetAddress.getHostAddress() != null && !inetAddress.getHostAddress().equals(ipv6Prefix + "1")) {
+                        String ipv6Addr = inetAddress.getHostAddress();
+                        if (ipv6Addr.contains("::")) {
+                            return ipv6Addr.split("::")[0];
+                        } else {
+                            String[] tmp = ipv6Addr.split(":");
+                            return tmp[0] + ":" + tmp[1] + ":" + tmp[2] + ":" + tmp[3];
+                        }
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
     // FIXME - FEATURE - disable IPv6 when MTU is lower than spec allows
     private void restoreTether() {
@@ -235,10 +262,10 @@ public class ForegroundService extends Service {
                 ipv4Prefix = "v4-";
             }
 
-            if (autostartVPN > 0 || cellularWatchdog) {
-                if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
-                    Log.i("usbtether", "Checking connection in 60 seconds...");
-                    handler2.postDelayed(checkConnection, 60000);
+            if (autostartVPN > 0 || cellularWatchdog || dnsmasq || dpiCircumvention || ipv6TYPE.equals("TPROXY")) {
+                if (!HandlerCompat.hasCallbacks(handler2, watchdog)) {
+                    Log.i("usbtether", "Running watchdog in 60 seconds...");
+                    handler2.postDelayed(watchdog, 60000);
                 }
             }
 
@@ -328,6 +355,14 @@ public class ForegroundService extends Service {
                             if (dpiCircumvention) {
                                 Script.startTPWS(ipv4Addr, ipv6Prefix, getFilesDir().getPath());
                             }
+                            if (ipv6TYPE.equals("TPROXY")) {
+                                // Add TPROXY exception
+                                String tmp = getPrefix(currentInterface, ipv6Prefix);
+                                if (tmp != null) {
+                                    Log.i("TetherTPROXY", tmp);
+                                    Script.setTetherRoute(tmp);
+                                }
+                            }
                             notification.setContentTitle("Service is running, Connected");
                             mNotificationManager.notify(1, notification.build());
                         }
@@ -342,6 +377,14 @@ public class ForegroundService extends Service {
                                 SharedPreferences.Editor edit = sharedPref.edit();
                                 edit.putString("lastIPv6", newAddr);
                                 edit.apply();
+                            }
+                            if (ipv6TYPE.equals("TPROXY")) {
+                                // Add TPROXY exception
+                                String tmp = getPrefix(currentInterface, ipv6Prefix);
+                                if (tmp != null) {
+                                    Log.i("TetherTPROXY", tmp);
+                                    Script.setTetherRoute(tmp);
+                                }
                             }
                             if (usbReconnect) {
                                 Script.unconfigureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix);
@@ -437,7 +480,7 @@ public class ForegroundService extends Service {
                     usbReconnect = true;
                 }
                 // Stop bound services
-                Script.stopTPWS();
+                Script.stopTPWS(getFilesDir().getPath());
                 if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                     Log.i("usbtether", "USB Disconnected, removing tether restore callback");
                     handler.removeCallbacks(delayedRestore);
@@ -518,21 +561,22 @@ public class ForegroundService extends Service {
 
         Toast.makeText(this, "Service started by user.", Toast.LENGTH_LONG).show();
 
+        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         notification.setContentTitle("Service is running, USB disconnected");
         startForeground(1, notification.build());
+        mNotificationManager.notify(1, notification.build());
 
         Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 
-        /*if (Script.isUSBConfigured()) {
-            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            Log.i("usbtether", "Creating callback to restore tether in 10 seconds...");
-            handler.postDelayed(delayedRestore, 10000);
-            notification.setContentTitle("Service is running, waiting 10 seconds...");
+        if (Script.isUSBConfigured()) {
+            Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
+            handler.postDelayed(delayedRestore, 5000);
+            notification.setContentTitle("Service is running, waiting 5 seconds...");
             mNotificationManager.notify(1, notification.build());
-        }*/
+        }
 
         return Service.START_STICKY;
     }
@@ -554,8 +598,8 @@ public class ForegroundService extends Service {
         if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
             handler.removeCallbacks(delayedRestore);
         }
-        if (!HandlerCompat.hasCallbacks(handler2, checkConnection)) {
-            handler2.removeCallbacks(checkConnection);
+        if (!HandlerCompat.hasCallbacks(handler2, watchdog)) {
+            handler2.removeCallbacks(watchdog);
         }
 
 
@@ -577,6 +621,8 @@ public class ForegroundService extends Service {
         }
 
         if (!lastNetwork.equals("")) {
+            // Stop bound services
+            Script.stopTPWS(getFilesDir().getPath());
             Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
             Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
         }
