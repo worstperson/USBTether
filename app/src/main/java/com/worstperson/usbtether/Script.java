@@ -76,7 +76,6 @@ public class Script {
             shellCommand(ipt + tab + op + rule);
         }
     }
-    //String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
     static String[] gadgetVars() {
         String[] result = new String[]{ null, null, null };
@@ -546,7 +545,6 @@ public class Script {
             prefix = "tetherctrl";
         }
         shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
-        shellCommand("ip6tables -t nat -A " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
         addIPT(false, "nat", true, prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
     }
 
