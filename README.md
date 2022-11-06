@@ -2,12 +2,12 @@
 
 USB Tether is an application to automatically manage and maintain a tethered connection. It is capable of automatically switching networks and keeping a tether operation going despite USB and connectivity events. This has many uses, but was mainly designed for tethering directly to a router to serve a larger network. It is highly recommended to use charge control apps like [Battery Charge Limit](https://play.google.com/store/apps/details?id=com.slash.batterychargelimit&hl=en_US&gl=US) or [Advanced Charging Controller](https://forum.xda-developers.com/t/advanced-charging-controller-acc.3668427/) for dedicated modems.
 
- - Lets you tether to any interface or lock on to your phone's primary internet source.
+ - Lets you tether to any interface or lock on to your phone's primary internet source
  - Supports split CLAT "v4-" interfaces in Auto mode
  - Does not require APN modification to avoid classification
  - Built-in dnsmasq with support for DHCP, DHCP6, and SLAAC
  - Ability to set the IPv4 address (and /24 subnet)
- - IPv6 NAT supporting both Masquerading, SNAT, and TPROXY
+ - IPv6 NAT supporting Masquerading, SNAT, and TPROXY
  - IPv6 Prefix selection to set IPv6 priority
  - TTL/HL modification to make packets look like they came from your device
  - DPI Circumvention for bypassing traffic throttling
@@ -122,7 +122,7 @@ Be sure to set your preferred DNS servers as appropriate:
 ## TODO:
 
  - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
- - **Downstream Watchdog** - We should have a periodic check that traffic can pass to a downstream router or server.
+ - **Downstream Watchdog** - Do a periodic check that traffic can pass to a downstream ip.
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 
 ## DEPENDENCIES:

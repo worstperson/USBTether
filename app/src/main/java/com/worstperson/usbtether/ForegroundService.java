@@ -623,7 +623,6 @@ public class ForegroundService extends Service {
 
         if (!lastNetwork.equals("")) {
             // Stop bound services
-            Script.stopTPWS(getFilesDir().getPath());
             Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
             Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
         }

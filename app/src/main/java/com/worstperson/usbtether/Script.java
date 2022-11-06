@@ -470,29 +470,24 @@ public class Script {
                 shellCommand("ip -6 route delete local default dev lo table 998");
             }
         }
-        if ( new File(appData + "/.configured").exists() ) {
-            Log.i("USBTether", "Restoring tether interface state");
-            if (Integer.parseInt(clientBandwidth) > 0) {
-                shellCommand("iptables -D FORWARD -i " + ipv4Interface + " -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
-                shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
-                //shellCommand("ip6tables -D INPUT -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
-            }
-            if (fixTTL) {
-                shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
-                shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
-            }
-            unconfigureNAT(ipv4Interface, ipv6Interface, ipv6TYPE, ipv6Addr);
-            unforwardInterface(ipv4Interface, ipv6Interface);
-            unconfigureRoutes(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix);
-            shellCommand("ndc ipfwd disable tethering");
-        } else {
-            Log.w("USBTether", "Tether interface not configured");
+        Log.i("USBTether", "Restoring tether interface state");
+        if (Integer.parseInt(clientBandwidth) > 0) {
+            shellCommand("iptables -D FORWARD -i " + ipv4Interface + " -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+            shellCommand("ip6tables -D FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
         }
+        if (fixTTL) {
+            shellCommand("iptables -t mangle -D FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
+            shellCommand("ip6tables -t mangle -D FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
+        }
+        unconfigureNAT(ipv4Interface, ipv6Interface, ipv6TYPE, ipv6Addr);
+        unforwardInterface(ipv4Interface, ipv6Interface);
+        unconfigureRoutes(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix);
+        shellCommand("ndc ipfwd disable tethering");
     }
 
     static void checkProcesses(String ipv4Addr, String ipv6TYPE, String ipv6Prefix, Boolean dnsmasq, String appData, boolean dpiCircumvention) {
         if (dnsmasq) {
-            if (!Shell.cmd("[ -d /proc/$(cat " + appData + "/dnsmasq.pid) ]").exec().isSuccess()) {
+            if (!Shell.cmd("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]").exec().isSuccess()) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 Log.w("USBTether", "No dnsmasq process, restarting");
                 shellCommand("rm " + appData + "/dnsmasq.leases");
@@ -507,19 +502,19 @@ public class Script {
             }
         }
         if (dpiCircumvention) {
-            if (!Shell.cmd("[ -d /proc/$(cat " + appData + "/tpws.pid) ]").exec().isSuccess()) {
+            if (!Shell.cmd("[ -f " + appData + "/tpws.pid -a -d /proc/$(cat " + appData + "/tpws.pid) ]").exec().isSuccess()) {
                 Log.w("USBTether", "No tpws process, restarting");
                 startTPWS(ipv4Addr, ipv6Prefix, appData);
             }
         }
         if (ipv6TYPE.equals("TPROXY")) {
-            if (!Shell.cmd("[ -d /proc/$(cat " + appData + "/socks.pid) ]").exec().isSuccess()) {
+            if (!Shell.cmd("[ -f " + appData + "/socks.pid -a -d /proc/$(cat " + appData + "/socks.pid) ]").exec().isSuccess()) {
                 Log.w("USBTether", "No socks process, restarting");
                 shellCommand("kill -s 9 $(cat " + appData + "/socks.pid)");
                 shellCommand("rm " + appData + "/socks.pid");
                 shellCommand(appData + "/hev-socks5-server." + Build.SUPPORTED_ABIS[0] + " " + appData + "/socks.yml &");
             }
-            if (!Shell.cmd("[ -d /proc/$(cat " + appData + "/tproxy.pid) ]").exec().isSuccess()) {
+            if (!Shell.cmd("[ -f " + appData + "/tproxy.pid -a -d /proc/$(cat " + appData + "/tproxy.pid) ]").exec().isSuccess()) {
                 Log.w("USBTether", "No tproxy process, restarting");
                 shellCommand("rm " + appData + "/tproxy.pid");
                 shellCommand(appData + "/hev-socks5-tproxy." + Build.SUPPORTED_ABIS[0] + " " + appData + "/tproxy.yml &");
@@ -531,7 +526,7 @@ public class Script {
         killProcess(appData + "/tpws.pid");
         shellCommand("rm " + appData + "/tpws.pid");
         //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
-        shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pid-file=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
+        shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
     }
 
     static void stopTPWS(String appData) {

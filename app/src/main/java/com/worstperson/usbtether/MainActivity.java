@@ -273,12 +273,13 @@ public class MainActivity extends AppCompatActivity {
         if (!file.exists()) {
             try (FileWriter writer = new FileWriter(file)) {
                 writer.append("main:\n");
-                writer.append("  workers: 20\n");
+                writer.append("  workers: 15\n");
                 writer.append("  port: 1080\n");
                 writer.append("  listen-address: '::1'\n");
                 writer.append("  listen-ipv6-only: false\n");
                 writer.append("  bind-address: '::'\n");
                 writer.append("misc:\n");
+                writer.append("  task-stack-size: 30720\n");
                 writer.append("  pid-file: " + getFilesDir().getPath() + "/socks.pid\n\n");
                 writer.flush();
             } catch (IOException e) {
@@ -303,6 +304,7 @@ public class MainActivity extends AppCompatActivity {
                 writer.append("  address: '::'\n");
                 writer.append("  upstream: 8.8.8.8\n");
                 writer.append("misc:\n");
+                writer.append("  task-stack-size: 30720\n");
                 writer.append("  pid-file: " + getFilesDir().getPath() + "/tproxy.pid\n\n");
                 writer.flush();
             } catch (IOException e) {
