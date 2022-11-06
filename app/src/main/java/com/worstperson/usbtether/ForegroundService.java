@@ -360,7 +360,7 @@ public class ForegroundService extends Service {
                                 String tmp = getPrefix(currentInterface, ipv6Prefix);
                                 if (tmp != null) {
                                     Log.i("TetherTPROXY", tmp);
-                                    Script.setTetherRoute(tmp);
+                                    Script.setTPROXYRoute(tmp);
                                 }
                             }
                             notification.setContentTitle("Service is running, Connected");
@@ -383,7 +383,7 @@ public class ForegroundService extends Service {
                                 String tmp = getPrefix(currentInterface, ipv6Prefix);
                                 if (tmp != null) {
                                     Log.i("TetherTPROXY", tmp);
-                                    Script.setTetherRoute(tmp);
+                                    Script.setTPROXYRoute(tmp);
                                 }
                             }
                             if (usbReconnect) {
@@ -427,6 +427,7 @@ public class ForegroundService extends Service {
             } else {
                 offlineCounter = offlineCounter + 1;
                 Log.w("usbtether", "Failed, tether interface unavailable");
+                needsReset = true;
                 if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                     Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
                     handler.postDelayed(delayedRestore, 5000);
