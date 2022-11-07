@@ -63,7 +63,7 @@ public class Script {
     }
 
     static void killProcess(String pidFile) {
-        if ( Shell.cmd("[ -f " + pidFile + " ]").exec().isSuccess()) {
+        if ( Shell.cmd("[ -f " + pidFile + " -a -d /proc/$(cat " + pidFile + ") ]").exec().isSuccess()) {
             shellCommand("kill -s 9 $(cat " + pidFile + ")");
         }
     }
@@ -449,7 +449,9 @@ public class Script {
             killProcess(appData + "/dnsmasq.pid");
             shellCommand("iptables -t nat -D PREROUTING -i rndis0 -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
             shellCommand("iptables -t nat -D PREROUTING -i rndis0 -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
-            shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
+            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                shellCommand("ip6tables -t nat -D PREROUTING -i rndis0 -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
+            }
         }
         if (ipv6TYPE.equals("TPROXY")) {
             killProcess(appData + "/socks.pid");

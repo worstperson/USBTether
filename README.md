@@ -122,7 +122,7 @@ Be sure to set your preferred DNS servers as appropriate:
 ## TODO:
 
  - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
- - **Downstream Watchdog** - Do a periodic check that traffic can pass to a downstream ip.
+ - **Downstream Watchdog** - Have a periodic check that traffic can pass to a downstream ip.
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 
 ## DEPENDENCIES:
