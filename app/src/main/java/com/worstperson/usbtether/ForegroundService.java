@@ -341,9 +341,10 @@ public class ForegroundService extends Service {
                             if (natApplied) {
                                 Log.w("usbtether", "Failed configuring tether, resetting interface...");
                                 Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
                                 natApplied = false;
                             }
+                            Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
+                            Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
                             if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                 Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
                                 handler.postDelayed(delayedRestore, 5000);
@@ -392,6 +393,7 @@ public class ForegroundService extends Service {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
                                     Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                                     Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
+                                    Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
                                     natApplied = false;
                                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
@@ -562,10 +564,8 @@ public class ForegroundService extends Service {
 
         Toast.makeText(this, "Service started by user.", Toast.LENGTH_LONG).show();
 
-        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         notification.setContentTitle("Service is running, USB disconnected");
         startForeground(1, notification.build());
-        mNotificationManager.notify(1, notification.build());
 
         Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
 
@@ -573,6 +573,7 @@ public class ForegroundService extends Service {
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 
         if (Script.isUSBConfigured()) {
+            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             Log.i("usbtether", "Creating callback to restore tether in 5 seconds...");
             handler.postDelayed(delayedRestore, 5000);
             notification.setContentTitle("Service is running, waiting 5 seconds...");

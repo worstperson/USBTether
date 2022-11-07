@@ -20,9 +20,6 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
-import java.io.File;
-import java.io.IOException;
-
 public class Script {
 
     static {
@@ -319,35 +316,29 @@ public class Script {
     }
 
     static void configureRNDIS(String gadgetPath, String configPath, String functionPath, String appData) {
-        if ( !new File(appData + "/.configured").exists()) {
-                //!Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"rndis\"* ] || [ -d " + configPath + "/usbtether ]").exec().isSuccess()) {
-            if (configPath == null) {
-                if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("setprop sys.usb.config rndis,adb");
-                } else {
-                    shellCommand("setprop sys.usb.config rndis");
-                }
-                shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
+        if (configPath == null) {
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config rndis,adb");
             } else {
-                shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-                if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("echo \"rndis_adb\" > " + configPath + "/strings/0x409/configuration");
-                } else {
-                    shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
-                }
-                //shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-                //shellCommand("svc usb resetUsbGadget");
-                //shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
-                //shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
-                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-                //Do it again?
-                //shellCommand("unlink " + configPath + "/usbtether");
-                //shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-                shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+                shellCommand("setprop sys.usb.config rndis");
             }
-            try { new File(appData + "/.configured").createNewFile(); } catch (IOException e) { e.printStackTrace(); }
+            shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
         } else {
-            Log.w("USBTether", "Tether interface already configured?!?");
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"rndis_adb\" > " + configPath + "/strings/0x409/configuration");
+            } else {
+                shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
+            }
+            //shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            //shellCommand("svc usb resetUsbGadget");
+            //shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
+            //shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            //Do it again?
+            //shellCommand("unlink " + configPath + "/usbtether");
+            //shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
     }
 
@@ -367,21 +358,12 @@ public class Script {
             shellCommand("unlink " + configPath + "/usbtether");
             shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
-        new File(appData + "/.configured").delete();
     }
 
     static boolean configureTether(String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6TYPE, String ipv6Prefix, String ipv6Addr, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, String configPath, String functionPath) {
         // Check that rndis0 is actually available to avoid wasting time
         if (!Shell.cmd("ip link set dev rndis0 down").exec().isSuccess()) {
-            Log.w("usbtether", "Aborting tether...");
-            if (configPath == null) {
-                shellCommand("setprop sys.usb.config adb");
-                shellCommand("until [[ \"$(getprop sys.usb.state)\" != *\"rndis\"* ]]; do sleep 1; done");
-                shellCommand("setprop sys.usb.config rndis,adb");
-            } else {
-                shellCommand("unlink " + configPath + "/usbtether");
-                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            }
+            Log.w("usbtether", "rndis0 unavailable, aborting tether...");
             return false;
         } else {
             Log.i("USBTether", "Enabling IP forwarding");
@@ -591,13 +573,9 @@ public class Script {
     static void recoverDataConnection() {
         Log.w("USBTether", "Restarting mobile data");
         // get current id, mcc, mnc
-        String[] parts = new String[0];
-        Shell.Result command = Shell.cmd("content query --uri content://telephony/carriers/current --projection _id:mcc:mnc | awk -F '[=,]' '{print $2,$4,$6}'").exec();
+        Shell.Result command = Shell.cmd("content query --uri content://telephony/carriers/preferapn --projection _id:mcc:mnc | awk -F '[=,]' '{print $2,$4,$6}'").exec();
         if ( command.isSuccess() ) {
-            for (String result : command.getOut()) {
-                parts = result.split(" ");
-                break;
-            }
+            String[] parts = command.getOut().get(0).split(" ");
             if ( parts.length == 3) {
                 // insert dummy apn
                 shellCommand("content insert --uri content://telephony/carriers --bind name:s:usbt_dummy --bind numeric:s:" + parts[1] + parts[2] + " --bind mcc:s:" + parts[1] + " --bind mnc:s:" + parts[2] + " --bind type:s:default --bind current:s:1 --bind apn:s:test --bind edited:s:1");
