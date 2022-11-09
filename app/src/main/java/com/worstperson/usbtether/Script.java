@@ -330,15 +330,9 @@ public class Script {
             } else {
                 shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
             }
-            //shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-            //shellCommand("svc usb resetUsbGadget");
-            //shellCommand("echo \"0x18d1\" > " + gadgetPath + "/idVendor");
-            //shellCommand("echo \"0x4ee4\" > " + gadgetPath + "/idProduct");
             shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            //Do it again?
-            //shellCommand("unlink " + configPath + "/usbtether");
-            //shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
             shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+            //shellCommand("svc usb resetUsbGadget");
         }
     }
 
@@ -350,6 +344,7 @@ public class Script {
                 shellCommand("setprop sys.usb.config none");
             }
         } else {
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
             if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
                 shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
             } else {

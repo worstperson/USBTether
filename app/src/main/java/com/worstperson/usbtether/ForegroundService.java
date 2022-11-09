@@ -413,6 +413,8 @@ public class ForegroundService extends Service {
                                 // Brings tether back up on connection change
                                 Script.unforwardInterface(ipv4Prefix + currentInterface, currentInterface);
                                 Script.forwardInterface(ipv4Prefix + currentInterface, currentInterface);
+                                notification.setContentTitle("Service is running, Connected");
+                                mNotificationManager.notify(1, notification.build());
                             }
                             usbReconnect = false;
                             needsReset = false;
@@ -425,6 +427,8 @@ public class ForegroundService extends Service {
                 } else {
                     Log.w("usbtether", "Tether failed, invalid interface");
                     needsReset = true;
+                    notification.setContentTitle("Service is running, invalid tether interface");
+                    mNotificationManager.notify(1, notification.build());
                 }
             } else {
                 offlineCounter = offlineCounter + 1;
