@@ -1,5 +1,5 @@
 /*
-        Copyright 2021 worstperson
+        Copyright 2023 worstperson
 
         Licensed under the Apache License, Version 2.0 (the "License");
         you may not use this file except in compliance with the License.
@@ -128,20 +128,17 @@ public class MainActivity extends AppCompatActivity {
 
     void copy_resource(int resource, String filename) {
         File file = new File(getFilesDir().getPath() + "/" + filename);
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(resource)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
+        try (InputStream in = getResources().openRawResource(resource)) {
+            if (!file.exists() || file.length() != in.available()) {
+                FileOutputStream out = new FileOutputStream(file);
+                byte[] buf = new byte[1024];
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
         file.setExecutable(true);
     }
