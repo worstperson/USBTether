@@ -65,12 +65,19 @@ public class Script {
         }
     }
 
-    static void addIPT(boolean iptables, String table, boolean append, String rule) {
-        String ipt = iptables ? "iptables" : "ip6tables";
+    static void addIPT(String table, boolean append, String rule) {
         String tab = table.equals("") ? " " : " -t " + table + " ";
         String op = append ? "-A " : "-I ";
-        if (!Shell.cmd(ipt + tab + "-C " + rule).exec().isSuccess()) {
-            shellCommand(ipt + tab + op + rule);
+        if (!Shell.cmd("iptables" + tab + "-C " + rule).exec().isSuccess()) {
+            shellCommand("iptables" + tab + op + rule);
+        }
+    }
+
+    static void addIP6T(String table, boolean append, String rule) {
+        String tab = table.equals("") ? " " : " -t " + table + " ";
+        String op = append ? "-A " : "-I ";
+        if (!Shell.cmd("ip6tables" + tab + "-C " + rule).exec().isSuccess()) {
+            shellCommand("ip6tables" + tab + op + rule);
         }
     }
 
@@ -207,37 +214,37 @@ public class Script {
                 counter = prefix;
             }
             shellCommand("ip6tables -t filter -D " + prefix + "_FORWARD -g " + counter + "_counters");
-            addIPT(false, "filter", true, prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
-            addIPT(false, "filter", true, prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -m state --state INVALID -j DROP");
-            addIPT(false, "filter", true, prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -g " + counter + "_counters");
-            addIPT(false, "filter", true, prefix + "_FORWARD -j DROP");
-            addIPT(false, "mangle", true, prefix + "_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
+            addIP6T("filter", true, prefix + "_FORWARD -i " + ipv6Interface + " -o rndis0 -m state --state RELATED,ESTABLISHED -g " + counter + "_counters");
+            addIP6T("filter", true, prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -m state --state INVALID -j DROP");
+            addIP6T("filter", true, prefix + "_FORWARD -i rndis0 -o " + ipv6Interface + " -g " + counter + "_counters");
+            addIP6T("filter", true, prefix + "_FORWARD -j DROP");
+            addIP6T("mangle", true, prefix + "_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
             shellCommand("ip6tables -t nat -N " + prefix + "_nat_POSTROUTING");
-            addIPT(false, "nat", true, "POSTROUTING -j " + prefix + "_nat_POSTROUTING");
+            addIP6T("nat", true, "POSTROUTING -j " + prefix + "_nat_POSTROUTING");
             if (ipv6TYPE.equals("SNAT")) {
-                addIPT(false, "nat", true, prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j SNAT --to " + ipv6Addr);
+                addIP6T("nat", true, prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j SNAT --to " + ipv6Addr);
             } else {
-                addIPT(false, "nat", true, prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
+                addIP6T("nat", true, prefix + "_nat_POSTROUTING -o " + ipv6Interface + " -j MASQUERADE");
             }
         } else if (ipv6TYPE.equals("TPROXY")) {
             shellCommand("ip6tables -t mangle -N TPROXY_ROUTE_PREROUTING");
-            addIPT(false, "mangle", true, "PREROUTING -j TPROXY_ROUTE_PREROUTING");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d :: -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d ::1 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d ::ffff:0:0:0/96 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 64:ff9b::/96 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 100::/64 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001::/32 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001:20::/28 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001:db8::/32 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d 2002::/16 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d fc00::/7 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d fe80::/10 -j RETURN");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -d ff00::/8 -j RETURN");
+            addIP6T("mangle", true, "PREROUTING -j TPROXY_ROUTE_PREROUTING");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d :: -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d ::1 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d ::ffff:0:0:0/96 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 64:ff9b::/96 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 100::/64 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001::/32 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001:20::/28 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 2001:db8::/32 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d 2002::/16 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d fc00::/7 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d fe80::/10 -j RETURN");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -d ff00::/8 -j RETURN");
             shellCommand("ip6tables -t mangle -N TPROXY_MARK_PREROUTING");
-            addIPT(false, "mangle", true, "TPROXY_ROUTE_PREROUTING -j TPROXY_MARK_PREROUTING");
-            addIPT(false, "mangle", true, "TPROXY_MARK_PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
-            addIPT(false, "mangle", true, "TPROXY_MARK_PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
+            addIP6T("mangle", true, "TPROXY_ROUTE_PREROUTING -j TPROXY_MARK_PREROUTING");
+            addIP6T("mangle", true, "TPROXY_MARK_PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
+            addIP6T("mangle", true, "TPROXY_MARK_PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
             shellCommand("ip -6 rule add fwmark 1088 table 999");
             shellCommand("ip -6 route add local default dev lo table 999");
         }
@@ -277,7 +284,7 @@ public class Script {
     }
 
     static void setTPROXYRoute(String prefix) {
-        addIPT(false, "mangle", false, "TPROXY_ROUTE_PREROUTING -d " + prefix + "::/64 -j RETURN");
+        addIP6T("mangle", false, "TPROXY_ROUTE_PREROUTING -d " + prefix + "::/64 -j RETURN");
     }
 
     //    *T-Mobile runs a NAT for IPv4 and open for IPv6.
@@ -289,13 +296,13 @@ public class Script {
             prefix = "tetherctrl";
         }
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-        addIPT(true, "nat", true, "PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
-        addIPT(true, "nat", true, "PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
-        addIPT(true, "", false, prefix + "_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+        addIPT("nat", true, "PREROUTING -i " + ipv4Interface + " -p tcp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        addIPT("nat", true, "PREROUTING -i " + ipv4Interface + " -p udp -j DNAT --to-destination " + ipv4Prefix + ".5");
+        addIPT("", false, prefix + "_FORWARD -p tcp -d " + ipv4Prefix + ".5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-            addIPT(false, "nat", true, "PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
-            addIPT(false, "nat", true, "PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
-            addIPT(false, "", false, prefix + "_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
+            addIP6T("nat", true, "PREROUTING -i " + ipv6Interface + " -p tcp -j DNAT --to-destination " + ipv6Prefix + "5");
+            addIP6T("nat", true, "PREROUTING -i " + ipv6Interface + " -p udp -j DNAT --to-destination " + ipv6Prefix + "5");
+            addIP6T("", false, prefix + "_FORWARD -p tcp -d " + ipv6Prefix + "5 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT");
         }
     }
 
@@ -315,8 +322,8 @@ public class Script {
         }
     }
 
-    static void configureRNDIS(String gadgetPath, String configPath, String functionPath, String appData) {
-        if (configPath == null) {
+    static void configureRNDIS(boolean legacyUSB, String gadgetPath, String configPath, String functionPath, String appData) {
+        if (legacyUSB || configPath == null) {
             if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
                 shellCommand("setprop sys.usb.config rndis,adb");
             } else {
@@ -336,8 +343,8 @@ public class Script {
         }
     }
 
-    static void unconfigureRNDIS(String gadgetPath, String configPath, String appData) {
-        if (configPath == null) {
+    static void unconfigureRNDIS(boolean legacyUSB, String gadgetPath, String configPath, String appData) {
+        if (legacyUSB || configPath == null) {
             if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
                 shellCommand("setprop sys.usb.config adb");
             } else {
@@ -365,23 +372,23 @@ public class Script {
             shellCommand("ndc ipfwd enable tethering");
             configureNAT(ipv4Interface, ipv6Interface, ipv6TYPE, ipv6Addr);
             if (fixTTL) {
-                addIPT(true, "mangle", true, "FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
+                addIPT("mangle", true, "FORWARD -i rndis0 -o " + ipv4Interface + " -j TTL --ttl-set 64");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Won't work with encapsulated traffic
-                    addIPT(false, "mangle", true, "FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
+                    addIP6T("mangle", true, "FORWARD -i rndis0 -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
             }
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per IP address
-                addIPT(true, "", true, "FORWARD -i " + ipv4Interface + " -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+                addIPT("", true, "FORWARD -i " + ipv4Interface + " -o rndis0 -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Not supported by TPROXY
-                    addIPT(false, "", true, "FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
+                    addIP6T("", true, "FORWARD -i " + ipv6Interface + " -o rndis0 -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
                 }
             }
             if (dnsmasq) {
-                addIPT(true, "nat", false, "PREROUTING -i rndis0 -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
-                addIPT(true, "nat", false, "PREROUTING -i rndis0 -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
+                addIPT("nat", false, "PREROUTING -i rndis0 -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
+                addIPT("nat", false, "PREROUTING -i rndis0 -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    addIPT(false, "nat", false, "PREROUTING -i rndis0 -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
+                    addIP6T("nat", false, "PREROUTING -i rndis0 -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
                 }
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
@@ -400,15 +407,15 @@ public class Script {
                 shellCommand(appData + "/hev-socks5-tproxy." + Build.SUPPORTED_ABIS[0] + " " + appData + "/tproxy.yml &");
             }
             if (dpiCircumvention) {
-                addIPT(true, "nat", false, "PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
-                addIPT(true, "nat", false, "PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+                addIPT("nat", false, "PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
+                addIPT("nat", false, "PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    addIPT(false, "nat", false, "PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-                    addIPT(false, "nat", false, "PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                    addIP6T("nat", false, "PREROUTING -i rndis0 -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                    addIP6T("nat", false, "PREROUTING -i rndis0 -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
                 } else if (ipv6TYPE.equals("TPROXY")) {
                     // Huh, only need the IP_TRANSPARENT patch for IPv4?
-                    addIPT(false, "mangle", false, "TPROXY_MARK_PREROUTING -p tcp --dport 80 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
-                    addIPT(false, "mangle", false, "TPROXY_MARK_PREROUTING -p tcp --dport 443 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
+                    addIP6T("mangle", false, "TPROXY_MARK_PREROUTING -p tcp --dport 80 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
+                    addIP6T("mangle", false, "TPROXY_MARK_PREROUTING -p tcp --dport 443 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
                     shellCommand("ip -6 rule add fwmark 8123 table 998");
                     shellCommand("ip -6 route add local default dev lo table 998");
                 }
@@ -489,7 +496,6 @@ public class Script {
         if (ipv6TYPE.equals("TPROXY")) {
             if (!Shell.cmd("[ -f " + appData + "/socks.pid -a -d /proc/$(cat " + appData + "/socks.pid) ]").exec().isSuccess()) {
                 Log.w("USBTether", "No socks process, restarting");
-                shellCommand("kill -s 9 $(cat " + appData + "/socks.pid)");
                 shellCommand("rm " + appData + "/socks.pid");
                 shellCommand(appData + "/hev-socks5-server." + Build.SUPPORTED_ABIS[0] + " " + appData + "/socks.yml &");
             }
@@ -519,7 +525,7 @@ public class Script {
             prefix = "tetherctrl";
         }
         shellCommand("ip6tables -t nat -D " + prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + ipv6Addr);
-        addIPT(false, "nat", true, prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
+        addIP6T("nat", true, prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
     }
 
     static Boolean testConnection(String tetherInterface) {

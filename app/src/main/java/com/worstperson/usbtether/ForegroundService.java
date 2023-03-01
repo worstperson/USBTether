@@ -79,6 +79,8 @@ public class ForegroundService extends Service {
         }
     };
 
+    // TODO: check for callbacks to handler to prevent races
+    //  add network recovery to handler?
     final Handler handler2 = new Handler(Looper.getMainLooper());
     Runnable watchdog = new Runnable() {
         @Override
@@ -97,13 +99,23 @@ public class ForegroundService extends Service {
             if (isStarted && Script.isUSBConfigured()) {
                 Log.i("usbtether", "Checking connection availability...");
                 String iface;
-                if (cellularWatchdog && (iface = isCellularActive()) != null && !(Script.testConnection(iface) || Script.testConnection6(iface))) {
+                boolean restartVPN = false;
+                if (autostartVPN > 0 && !Script.testConnection(lastNetwork)) {
+                    Log.w("usbtether", "VPN connection is DOWN, stopping");
+                    stopVPN(autostartVPN, wireguardProfile);
+                    restartVPN = true;
+                }
+                if (cellularWatchdog && ((iface = isCellularActive()) == null || !(Script.testConnection(iface) || Script.testConnection6(iface)))) {
                     Log.w("usbtether", "Cellular connection is DOWN, attempting recovery");
                     Script.recoverDataConnection();
+                    if (restartVPN) {
+                        Log.w("usbtether", "Restarting VPN after cellular recovery");
+                        startVPN(autostartVPN, wireguardProfile, false);
+                    }
                     needsReset = true;
-                } else if (autostartVPN > 0 && !Script.testConnection(lastNetwork)) {
-                    Log.w("usbtether", "VPN connection is DOWN, attempting recovery");
-                    startVPN(autostartVPN, wireguardProfile, true);
+                } else if (autostartVPN > 0 && restartVPN) {
+                    Log.w("usbtether", "Restarting VPN connection");
+                    startVPN(autostartVPN, wireguardProfile, false);
                     needsReset = true;
                 }
                 if (needsReset) {
@@ -127,19 +139,15 @@ public class ForegroundService extends Service {
     };
 
     private String isCellularActive() {
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        Network[] networks = cm.getAllNetworks();
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        Network[] networks = connectivityManager.getAllNetworks();
         String mobileNetwork = null;
         for (Network network : networks) {
-            NetworkCapabilities caps = cm.getNetworkCapabilities(network);
-            if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)) {
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-                    mobileNetwork = cm.getLinkProperties(network).getInterfaceName();
-                } else if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
-                    return null;
-                }
+            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
+            if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                    networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                mobileNetwork = connectivityManager.getLinkProperties(network).getInterfaceName();
             }
         }
         return mobileNetwork;
@@ -208,6 +216,21 @@ public class ForegroundService extends Service {
         }
     }
 
+    private void stopVPN(int autostartVPN, String wireguardProfile) {
+        if (autostartVPN == 1 || autostartVPN == 2) {
+            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
+            i.setPackage("com.wireguard.android");
+            i.putExtra("tunnel", wireguardProfile);
+            sendBroadcast(i);
+        } else {
+            if (autostartVPN == 3) {
+                Script.stopGoogleOneVPN();
+            } else if (autostartVPN == 4) {
+                Script.stopCloudflare1111Warp();
+            }
+        }
+    }
+
     private String getPrefix(String iface, String ipv6Prefix) {
         try {
             NetworkInterface netint = NetworkInterface.getByName(iface);
@@ -257,6 +280,7 @@ public class ForegroundService extends Service {
             String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
             String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
             boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
+            boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
             String ipv4Prefix = "";
             if (isXLAT) {
                 ipv4Prefix = "v4-";
@@ -343,8 +367,8 @@ public class ForegroundService extends Service {
                                 Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                                 natApplied = false;
                             }
-                            Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
-                            Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
+                            Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath, getFilesDir().getPath());
+                            Script.configureRNDIS(legacyUSB, gadgetPath, configPath, functionPath, getFilesDir().getPath());
                             if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                 Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
                                 handler.postDelayed(delayedRestore, 5000);
@@ -392,8 +416,8 @@ public class ForegroundService extends Service {
                                 if (!Script.configureRoutes(ipv4Prefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE)) {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
                                     Script.unconfigureTether(ipv4Prefix + currentInterface, currentInterface, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                    Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
-                                    Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
+                                    Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath, getFilesDir().getPath());
+                                    Script.configureRNDIS(legacyUSB, gadgetPath, configPath, functionPath, getFilesDir().getPath());
                                     natApplied = false;
                                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                                         Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
@@ -442,7 +466,9 @@ public class ForegroundService extends Service {
                 }
             }
         } else {
-            Log.i("usbtether", "USB not connected");
+            Log.i("usbtether", "USB Disconnected");
+            notification.setContentTitle("Service is running, USB disconnected");
+            mNotificationManager.notify(1, notification.build());
         }
     }
 
@@ -532,6 +558,7 @@ public class ForegroundService extends Service {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
+        boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
         SharedPreferences.Editor edit = sharedPref.edit();
         if (fixTTL && !hasTTL) {
             edit.putBoolean("fixTTL", false);
@@ -571,7 +598,7 @@ public class ForegroundService extends Service {
         notification.setContentTitle("Service is running, USB disconnected");
         startForeground(1, notification.build());
 
-        Script.configureRNDIS(gadgetPath, configPath, functionPath, getFilesDir().getPath());
+        Script.configureRNDIS(legacyUSB, gadgetPath, configPath, functionPath, getFilesDir().getPath());
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
         registerReceiver(ConnectionReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
@@ -621,6 +648,7 @@ public class ForegroundService extends Service {
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
         boolean isXLAT = sharedPref.getBoolean("isXLAT", false);
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
+        boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
         String ipv4Prefix = "";
         if (isXLAT) {
             ipv4Prefix = "v4-";
@@ -629,7 +657,7 @@ public class ForegroundService extends Service {
         if (!lastNetwork.equals("")) {
             // Stop bound services
             Script.unconfigureTether(ipv4Prefix + lastNetwork, lastNetwork, ipv6TYPE, ipv4Addr, ipv6Prefix, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-            Script.unconfigureRNDIS(gadgetPath, configPath, getFilesDir().getPath());
+            Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath, getFilesDir().getPath());
         }
 
         natApplied = false;

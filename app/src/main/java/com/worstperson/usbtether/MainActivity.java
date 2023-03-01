@@ -27,11 +27,13 @@ import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -92,6 +94,39 @@ public class MainActivity extends AppCompatActivity {
         interface_spinner.setAdapter(adapter);
     }
 
+    @SuppressLint("SetTextI18n")
+    void setNetTextview(TextView net_textview) {
+        String name = "UNKNOWN";
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            Network activeNetwork = connectivityManager.getActiveNetwork();
+            if (activeNetwork != null) {
+                name = "";
+                NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
+                if (!networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
+                    name = " (UNKNOWN)";
+                    boolean usesCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+                    Network[] networks = connectivityManager.getAllNetworks();
+                    for (Network network : networks) {
+                        NetworkCapabilities upstreamCapabilities = connectivityManager.getNetworkCapabilities(network);
+                        if (upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                                upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                            if (upstreamCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == usesCellular) {
+                                name = " (" + connectivityManager.getLinkProperties(network).getInterfaceName() + ")";
+                                break;
+                            }
+                        }
+                    }
+                }
+                LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
+                if (linkProperties != null) {
+                    name = linkProperties.getInterfaceName() + name;
+                }
+            }
+        }
+        net_textview.setText(name);
+    }
+
     @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife", "WrongConstant"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,6 +134,18 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         View view = findViewById(android.R.id.content);
+
+        /*ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        Network[] networks = connectivityManager.getAllNetworks();
+        for (Network network : networks) {
+            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
+            Log.i("usbtether", connectivityManager.getLinkProperties(network).getInterfaceName());
+            Log.i("usbtether", "NET_CAPABILITY_NOT_VPN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_INTERNET: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_DUN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)?"true":"false"));
+            Log.i("usbtether", "TRANSPORT_CELLULAR: " + (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_VALIDATED: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"true":"false"));
+        }*/
 
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission("com.wireguard.android.permission.CONTROL_TUNNELS") != PackageManager.PERMISSION_GRANTED) {
@@ -280,7 +327,7 @@ public class MainActivity extends AppCompatActivity {
                 writer.append("  bind-address: '::'\n");
                 writer.append("misc:\n");
                 writer.append("  task-stack-size: 30720\n");
-                writer.append("  pid-file: " + getFilesDir().getPath() + "/socks.pid\n\n");
+                writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/socks.pid\n\n");
                 writer.flush();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -305,7 +352,7 @@ public class MainActivity extends AppCompatActivity {
                 writer.append("  upstream: 8.8.8.8\n");
                 writer.append("misc:\n");
                 writer.append("  task-stack-size: 30720\n");
-                writer.append("  pid-file: " + getFilesDir().getPath() + "/tproxy.pid\n\n");
+                writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/tproxy.pid\n\n");
                 writer.flush();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -319,6 +366,7 @@ public class MainActivity extends AppCompatActivity {
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch dmz_switch = findViewById(R.id.dmz_switch);
         Switch cell_switch = findViewById(R.id.cell_switch);
+        Switch legacy_switch = findViewById(R.id.legacy_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
@@ -329,17 +377,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout prefix_layout = findViewById(R.id.prefix_layout);
         LinearLayout wgp_layout = findViewById(R.id.wgp_layout);
 
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            Network activeNetwork = connectivityManager.getActiveNetwork();
-            if (activeNetwork != null) {
-                LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
-                if (linkProperties != null) {
-                    String name = linkProperties.getInterfaceName();
-                    net_textview.setText(name);
-                }
-            }
-        }
+        setNetTextview(net_textview);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
@@ -355,6 +393,7 @@ public class MainActivity extends AppCompatActivity {
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
+        boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
 
         boolean hasTTL = Script.hasTTL();
         boolean hasTPROXY = Script.hasTPROXY();
@@ -381,6 +420,7 @@ public class MainActivity extends AppCompatActivity {
         dpi_switch.setChecked(dpiCircumvention);
         dmz_switch.setChecked(dmz);
         cell_switch.setChecked(cellularWatchdog);
+        legacy_switch.setChecked(legacyUSB);
 
         if (!hasTTL) {
             ttl_switch.setEnabled(false);
@@ -441,6 +481,7 @@ public class MainActivity extends AppCompatActivity {
             dpi_switch.setEnabled(false);
             dmz_switch.setEnabled(false);
             cell_switch.setEnabled(false);
+            legacy_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -470,6 +511,7 @@ public class MainActivity extends AppCompatActivity {
                 dpi_switch.setEnabled(!isChecked);
                 dmz_switch.setEnabled(!isChecked);
                 cell_switch.setEnabled(!isChecked);
+                legacy_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
                 wg_text.setEnabled(!isChecked);
                 bandwidth_text.setEnabled(!isChecked);
@@ -536,6 +578,15 @@ public class MainActivity extends AppCompatActivity {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("cellularWatchdog", isChecked);
+                edit.apply();
+            }
+        });
+
+        legacy_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("legacyUSB", isChecked);
                 edit.apply();
             }
         });
@@ -665,7 +716,7 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
-                    Pattern sPattern = Pattern.compile("^[0-9]+$");
+                    Pattern sPattern = Pattern.compile("^\\d+$");
                     if (sPattern.matcher(String.valueOf(bandwidth_text.getText())).matches()) {
                         SharedPreferences.Editor edit = sharedPref.edit();
                         edit.putString("clientBandwidth", String.valueOf(bandwidth_text.getText()));
@@ -692,21 +743,23 @@ public class MainActivity extends AppCompatActivity {
     public void onResume(){
         super.onResume();
 
+        /*ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        Network[] networks = connectivityManager.getAllNetworks();
+        for (Network network : networks) {
+            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
+            Log.i("usbtether", connectivityManager.getLinkProperties(network).getInterfaceName());
+            Log.i("usbtether", "NET_CAPABILITY_NOT_VPN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_INTERNET: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_DUN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)?"true":"false"));
+            Log.i("usbtether", "TRANSPORT_CELLULAR: " + (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"true":"false"));
+            Log.i("usbtether", "NET_CAPABILITY_VALIDATED: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"true":"false"));
+        }*/
+
         TextView net_textview = findViewById(R.id.net_textview);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         EditText ipv4_text = findViewById(R.id.ipv4_text);
 
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            Network activeNetwork = connectivityManager.getActiveNetwork();
-            if (activeNetwork != null) {
-                LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
-                if (linkProperties != null) {
-                    String name = linkProperties.getInterfaceName();
-                    net_textview.setText(name);
-                }
-            }
-        }
+        setNetTextview(net_textview);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
