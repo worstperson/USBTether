@@ -33,7 +33,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -127,6 +126,26 @@ public class MainActivity extends AppCompatActivity {
         net_textview.setText(name);
     }
 
+    void copy_resource(int resource, String filename) {
+        File file = new File(getFilesDir().getPath() + "/" + filename);
+        if (!file.exists()) {
+            try (InputStream in = getResources().openRawResource(resource)) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    byte[] buf = new byte[1024];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        file.setExecutable(true);
+    }
+
     @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife", "WrongConstant"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -134,18 +153,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         View view = findViewById(android.R.id.content);
-
-        /*ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        Network[] networks = connectivityManager.getAllNetworks();
-        for (Network network : networks) {
-            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
-            Log.i("usbtether", connectivityManager.getLinkProperties(network).getInterfaceName());
-            Log.i("usbtether", "NET_CAPABILITY_NOT_VPN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_INTERNET: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_DUN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)?"true":"false"));
-            Log.i("usbtether", "TRANSPORT_CELLULAR: " + (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_VALIDATED: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"true":"false"));
-        }*/
 
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission("com.wireguard.android.permission.CONTROL_TUNNELS") != PackageManager.PERMISSION_GRANTED) {
@@ -172,151 +179,16 @@ public class MainActivity extends AppCompatActivity {
         // FIXME - Build these dependencies as libraries and add them to the project
         // Really though, this is getting stupid. Adding root services and bindings is not that difficult.
 
-        File file = new File(getFilesDir().getPath() + "/dnsmasq.armeabi-v7a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.dnsmasq_arm)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
+        copy_resource(R.raw.dnsmasq_arm, "dnsmasq.armeabi-v7a");
+        copy_resource(R.raw.dnsmasq_arm64, "dnsmasq.arm64-v8a");
+        copy_resource(R.raw.tpws_arm, "tpws.armeabi-v7a");
+        copy_resource(R.raw.tpws_arm64, "tpws.arm64-v8a");
+        copy_resource(R.raw.hevserver_arm, "hev-socks5-server.armeabi-v7a");
+        copy_resource(R.raw.hevserver_arm64, "hev-socks5-server.arm64-v8a");
+        copy_resource(R.raw.hevtproxy_arm, "hev-socks5-tproxy.armeabi-v7a");
+        copy_resource(R.raw.hevtproxy_arm64, "hev-socks5-tproxy.arm64-v8a");
 
-        file = new File(getFilesDir().getPath() + "/dnsmasq.arm64-v8a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.dnsmasq_arm64)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/tpws.armeabi-v7a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.tpws_arm)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/tpws.arm64-v8a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.tpws_arm64)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/hev-socks5-server.armeabi-v7a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.hevserver_arm)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/hev-socks5-server.arm64-v8a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.hevserver_arm64)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/hev-socks5-tproxy.armeabi-v7a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.hevtproxy_arm)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/hev-socks5-tproxy.arm64-v8a");
-        if (!file.exists()) {
-            try (InputStream in = getResources().openRawResource(R.raw.hevtproxy_arm64)) {
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buf = new byte[1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        file.setExecutable(true);
-
-        file = new File(getFilesDir().getPath() + "/socks.yml");
+        File file = new File(getFilesDir().getPath() + "/socks.yml");
         if (!file.exists()) {
             try (FileWriter writer = new FileWriter(file)) {
                 writer.append("main:\n");
@@ -742,18 +614,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onResume(){
         super.onResume();
-
-        /*ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        Network[] networks = connectivityManager.getAllNetworks();
-        for (Network network : networks) {
-            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
-            Log.i("usbtether", connectivityManager.getLinkProperties(network).getInterfaceName());
-            Log.i("usbtether", "NET_CAPABILITY_NOT_VPN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_INTERNET: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_DUN: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_DUN)?"true":"false"));
-            Log.i("usbtether", "TRANSPORT_CELLULAR: " + (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"true":"false"));
-            Log.i("usbtether", "NET_CAPABILITY_VALIDATED: " + (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"true":"false"));
-        }*/
 
         TextView net_textview = findViewById(R.id.net_textview);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
