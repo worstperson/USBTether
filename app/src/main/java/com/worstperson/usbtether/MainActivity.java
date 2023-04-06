@@ -47,10 +47,8 @@ import android.widget.TextView;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -64,13 +62,13 @@ public class MainActivity extends AppCompatActivity {
 
     PowerManager powerManager;
 
-    void setInterfaceSpinner(String tetherInterface, Spinner interface_spinner) {
+    void setInterfaceSpinner(String upstreamInterface, Spinner interface_spinner) {
         ArrayList<String> arraySpinner = new ArrayList<>();
-        arraySpinner.add(tetherInterface);
-        if (!tetherInterface.equals("Auto")) {
+        arraySpinner.add(upstreamInterface);
+        if (!upstreamInterface.equals("Auto")) {
             arraySpinner.add("Auto");
         }
-        //if (!tetherInterface.equals("TPROXY")) {
+        //if (!upstreamInterface.equals("TPROXY")) {
         //    arraySpinner.add("TPROXY");
         //}
         Enumeration<NetworkInterface> nets;
@@ -126,23 +124,6 @@ public class MainActivity extends AppCompatActivity {
         net_textview.setText(name);
     }
 
-    void copy_resource(int resource, String filename) {
-        File file = new File(getFilesDir().getPath() + "/" + filename);
-        try (InputStream in = getResources().openRawResource(resource)) {
-            if (!file.exists() || file.length() != in.available()) {
-                FileOutputStream out = new FileOutputStream(file);
-                byte[] buf = new byte[1024];
-                int len;
-                while ((len = in.read(buf)) > 0) {
-                    out.write(buf, 0, len);
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        file.setExecutable(true);
-    }
-
     @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife", "WrongConstant"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -172,18 +153,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }).show();
         }
-
-        // FIXME - Build these dependencies as libraries and add them to the project
-        // Really though, this is getting stupid. Adding root services and bindings is not that difficult.
-
-        copy_resource(R.raw.dnsmasq_arm, "dnsmasq.armeabi-v7a");
-        copy_resource(R.raw.dnsmasq_arm64, "dnsmasq.arm64-v8a");
-        copy_resource(R.raw.tpws_arm, "tpws.armeabi-v7a");
-        copy_resource(R.raw.tpws_arm64, "tpws.arm64-v8a");
-        copy_resource(R.raw.hevserver_arm, "hev-socks5-server.armeabi-v7a");
-        copy_resource(R.raw.hevserver_arm64, "hev-socks5-server.arm64-v8a");
-        copy_resource(R.raw.hevtproxy_arm, "hev-socks5-tproxy.armeabi-v7a");
-        copy_resource(R.raw.hevtproxy_arm64, "hev-socks5-tproxy.arm64-v8a");
 
         File file = new File(getFilesDir().getPath() + "/socks.yml");
         if (!file.exists()) {
@@ -257,18 +226,18 @@ public class MainActivity extends AppCompatActivity {
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         boolean dmz = sharedPref.getBoolean("dmz", false);
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
-        String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
+        String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
         boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
 
-        boolean hasTTL = Script.hasTTL();
-        boolean hasTPROXY = Script.hasTPROXY();
-        boolean hasTable = Script.hasTable();
-        boolean hasSNAT = Script.hasSNAT();
-        boolean hasMASQUERADE = Script.hasMASQUERADE();
+        boolean hasTTL = Script.hasTTL;
+        boolean hasTPROXY = Script.hasTPROXY;
+        boolean hasTable = Script.hasTable;
+        boolean hasSNAT = Script.hasSNAT;
+        boolean hasMASQUERADE = Script.hasMASQUERADE;
 
         SharedPreferences.Editor edit = sharedPref.edit();
         if (fixTTL && !hasTTL) {
@@ -299,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
         wg_text.setText(wireguardProfile);
         bandwidth_text.setText(clientBandwidth);
 
-        setInterfaceSpinner(tetherInterface, interface_spinner);
+        setInterfaceSpinner(upstreamInterface, interface_spinner);
 
         ArrayList<String> arraySpinner2 = new ArrayList<>();
         arraySpinner2.add("None");
@@ -465,7 +434,7 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 Object item = adapterView.getItemAtPosition(position);
                 SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putString("tetherInterface", item.toString());
+                edit.putString("upstreamInterface", item.toString());
                 edit.apply();
             }
             @Override
@@ -506,7 +475,7 @@ public class MainActivity extends AppCompatActivity {
         vpn_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
-                String tetherInterface = "";
+                String upstreamInterface = "";
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
@@ -519,20 +488,20 @@ public class MainActivity extends AppCompatActivity {
                     case 1: case 2:
                         wgp_layout.setVisibility(View.VISIBLE);
                         if (position == 1) {
-                            tetherInterface = "tun0";
+                            upstreamInterface = "tun0";
                         } else {
-                            tetherInterface = wireguardProfile;
+                            upstreamInterface = wireguardProfile;
                         }
                         break;
                     default:
                         wgp_layout.setVisibility(View.GONE);
-                        tetherInterface = "tun0";
+                        upstreamInterface = "tun0";
 
                 }
                 if (position > 0) {
                     interface_spinner.setEnabled(false);
-                    setInterfaceSpinner(tetherInterface, interface_spinner);
-                    edit.putString("tetherInterface", tetherInterface);
+                    setInterfaceSpinner(upstreamInterface, interface_spinner);
+                    edit.putString("upstreamInterface", upstreamInterface);
                 } else if (!serviceEnabled) {
                     interface_spinner.setEnabled(true);
                 }
@@ -568,9 +537,9 @@ public class MainActivity extends AppCompatActivity {
                     SharedPreferences.Editor edit = sharedPref.edit();
                     edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
                     if (autostartVPN == 2) {
-                        String tetherInterface = String.valueOf(wg_text.getText());
-                        MainActivity.this.setInterfaceSpinner(tetherInterface, interface_spinner);
-                        edit.putString("tetherInterface", tetherInterface);
+                        String upstreamInterface = String.valueOf(wg_text.getText());
+                        MainActivity.this.setInterfaceSpinner(upstreamInterface, interface_spinner);
+                        edit.putString("upstreamInterface", upstreamInterface);
                     }
                     edit.apply();
                     return false;
@@ -619,10 +588,10 @@ public class MainActivity extends AppCompatActivity {
         setNetTextview(net_textview);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-        String tetherInterface = sharedPref.getString("tetherInterface", "Auto");
+        String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
 
-        setInterfaceSpinner(tetherInterface, interface_spinner);
+        setInterfaceSpinner(upstreamInterface, interface_spinner);
         ipv4_text.setText(ipv4Addr);
     }
 }
