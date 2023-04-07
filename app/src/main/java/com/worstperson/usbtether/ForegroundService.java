@@ -360,23 +360,8 @@ public class ForegroundService extends Service {
                             e.printStackTrace();
                         }
                         edit.apply();
-                        if (!(natApplied = Script.configureTether("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, fixTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz))
-                                || !Script.configureInterface("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix)) {
-                            if (natApplied) {
-                                Log.w("usbtether", "Failed configuring tether, resetting interface...");
-                                Script.unconfigureInterface("rndis0");
-                                Script.unconfigureTether("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                natApplied = false;
-                            }
-                            Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath);
-                            Script.configureRNDIS(legacyUSB, gadgetPath, configPath, functionPath);
-                            if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                                Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
-                                handler.postDelayed(delayedRestore, 5000);
-                                notification.setContentTitle("Service is running, waiting 5 seconds...");
-                                mNotificationManager.notify(1, notification.build());
-                            }
-                        } else {
+                        if (Script.configureTether("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, fixTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz)) {
+                            natApplied = true;
                             // Start bound services
                             if (dpiCircumvention) {
                                 Script.startTPWS(ipv4Addr, ipv6Prefix, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
@@ -391,6 +376,17 @@ public class ForegroundService extends Service {
                             }
                             notification.setContentTitle("Service is running, Connected");
                             mNotificationManager.notify(1, notification.build());
+                        } else {
+                            Log.w("usbtether", "Failed configuring tether, resetting interface...");
+                            Script.unconfigureInterface("rndis0");
+                            Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath);
+                            Script.configureRNDIS(legacyUSB, gadgetPath, configPath, functionPath);
+                            if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                                Log.i("usbtether", "Creating callback to retry tether in 5 seconds...");
+                                handler.postDelayed(delayedRestore, 5000);
+                                notification.setContentTitle("Service is running, waiting 5 seconds...");
+                                mNotificationManager.notify(1, notification.build());
+                            }
                         }
                     } else {
                         // Restore Tether
@@ -414,7 +410,14 @@ public class ForegroundService extends Service {
                             }
                             if (usbReconnect) {
                                 Script.unconfigureInterface("rndis0");
-                                if (!Script.configureInterface("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix)) {
+                                if (Script.configureInterface("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix)) {
+                                    // Start bound services
+                                    if (dpiCircumvention) {
+                                        Script.startTPWS(ipv4Addr, ipv6Prefix, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
+                                    }
+                                    notification.setContentTitle("Service is running, Connected");
+                                    mNotificationManager.notify(1, notification.build());
+                                } else {
                                     Log.w("usbtether", "Failed to restore after USB reset, resetting interface...");
                                     Script.unconfigureTether("rndis0", clatPrefix + currentInterface, currentInterface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
                                     Script.unconfigureRNDIS(legacyUSB, gadgetPath, configPath);
@@ -426,13 +429,6 @@ public class ForegroundService extends Service {
                                         notification.setContentTitle("Service is running, waiting 5 seconds...");
                                         mNotificationManager.notify(1, notification.build());
                                     }
-                                } else {
-                                    // Start bound services
-                                    if (dpiCircumvention) {
-                                        Script.startTPWS(ipv4Addr, ipv6Prefix, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
-                                    }
-                                    notification.setContentTitle("Service is running, Connected");
-                                    mNotificationManager.notify(1, notification.build());
                                 }
                             } else {
                                 // Brings tether back up on connection change

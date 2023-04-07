@@ -110,15 +110,68 @@ public class Script {
         return result;
     }
 
+    static void configureRNDIS(boolean legacyUSB, String gadgetPath, String configPath, String functionPath) {
+        boolean adbEnabled = false;
+        if (legacyUSB || configPath == null) {
+            Log.i("USBTether", "Configuring rndis state via legacy setprop");
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config rndis,adb");
+                adbEnabled = true;
+            } else {
+                shellCommand("setprop sys.usb.config rndis");
+            }
+            shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
+        } else {
+            Log.i("USBTether", "Configuring rndis state via usbgadget");
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"rndis_adb\" > " + configPath + "/strings/0x409/configuration");
+                adbEnabled = true;
+            } else {
+                shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
+            }
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+            //shellCommand("svc usb resetUsbGadget");
+        }
+        if (adbEnabled) {
+            shellCommand("setprop ctl.restart adbd");
+        }
+    }
+
+    static void unconfigureRNDIS(boolean legacyUSB, String gadgetPath, String configPath) {
+        boolean adbEnabled = false;
+        if (legacyUSB || configPath == null) {
+            Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config adb");
+                adbEnabled = true;
+            } else {
+                shellCommand("setprop sys.usb.config none");
+            }
+        } else {
+            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
+                adbEnabled = true;
+            } else {
+                shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
+            }
+            shellCommand("unlink " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+        }
+        if (adbEnabled) {
+            shellCommand("setprop ctl.restart adbd");
+        }
+    }
+
     private static boolean configureAddresses(String tetherInterface, String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Setting IP addresses");
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-        if (!shellCommand("ip link set dev " + tetherInterface + " up") ||
-                !shellCommand("ip address add local " + ipv4Addr + "/24 broadcast " + ipv4Prefix + ".255 scope global dev " + tetherInterface) ||
-                !shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev " + tetherInterface + " scope global")) {
-            return false;
-        }
-        return true;
+        return shellCommand("ip link set dev " + tetherInterface + " up")
+                && shellCommand("ip address add local " + ipv4Addr + "/24 broadcast " + ipv4Prefix + ".255 scope global dev " + tetherInterface)
+                && shellCommand("ip -6 addr add " + ipv6Prefix + "1/64 dev " + tetherInterface + " scope global");
     }
 
     private static void unconfigureAddresses(String tetherInterface) {
@@ -130,12 +183,12 @@ public class Script {
 
     static boolean configureRules(String tetherInterface, String ipv4Interface, String ipv6Interface) {
         Log.i("USBTether", "Setting IP rules");
-        return shellCommand("ip rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network") &&
-                shellCommand("ip rule add pref 510 from all iif lo oif " + tetherInterface + " lookup local_network") &&
-                shellCommand("ip rule add pref 540 from all iif " + tetherInterface + " lookup " + ipv4Interface) &&
-                shellCommand("ip -6 rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network") &&
-                shellCommand("ip -6 rule add pref 510 from all iif lo oif " + tetherInterface + " lookup local_network") &&
-                shellCommand("ip -6 rule add pref 540 from all iif " + tetherInterface + " lookup " + ipv6Interface);
+        return shellCommand("ip rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network")
+                && shellCommand("ip rule add pref 510 from all iif lo oif " + tetherInterface + " lookup local_network")
+                && shellCommand("ip rule add pref 540 from all iif " + tetherInterface + " lookup " + ipv4Interface)
+                && shellCommand("ip -6 rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network")
+                && shellCommand("ip -6 rule add pref 510 from all iif lo oif " + tetherInterface + " lookup local_network")
+                && shellCommand("ip -6 rule add pref 540 from all iif " + tetherInterface + " lookup " + ipv6Interface);
     }
 
     static void unconfigureRules() {
@@ -151,9 +204,9 @@ public class Script {
     static boolean configureRoutes(String tetherInterface, String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Setting IP routes");
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-        return shellCommand("ip route add " + ipv4Prefix + ".0/24 dev " + tetherInterface + " table local_network proto static scope link") &&
-                shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link") &&
-                shellCommand("ip -6 route add fe80::/64 dev " + tetherInterface + " table local_network proto static scope link");
+        return shellCommand("ip route add " + ipv4Prefix + ".0/24 dev " + tetherInterface + " table local_network proto static scope link")
+                && shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link")
+                && shellCommand("ip -6 route add fe80::/64 dev " + tetherInterface + " table local_network proto static scope link");
     }
 
     static void unconfigureRoutes(String tetherInterface) {
@@ -164,10 +217,10 @@ public class Script {
 
     static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Configuring interface");
-        return shellCommand("ip link set dev " + tetherInterface + " down") &&
-                configureAddresses(tetherInterface, ipv4Addr, ipv6Prefix) &&
-                configureRoutes(tetherInterface, ipv4Addr, ipv6Prefix) &&
-                configureRules(tetherInterface, ipv4Interface, ipv6Interface);
+        return shellCommand("ip link set dev " + tetherInterface + " down")
+                && configureAddresses(tetherInterface, ipv4Addr, ipv6Prefix)
+                && configureRoutes(tetherInterface, ipv4Addr, ipv6Prefix)
+                && configureRules(tetherInterface, ipv4Interface, ipv6Interface);
     }
 
     static void unconfigureInterface(String tetherInterface) {
@@ -328,68 +381,10 @@ public class Script {
         }
     }
 
-    static void configureRNDIS(boolean legacyUSB, String gadgetPath, String configPath, String functionPath) {
-        boolean adbEnabled = false;
-        if (legacyUSB || configPath == null) {
-            Log.i("USBTether", "Configuring rndis state via legacy setprop");
-            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("setprop sys.usb.config rndis,adb");
-                adbEnabled = true;
-            } else {
-                shellCommand("setprop sys.usb.config rndis");
-            }
-            shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ \"$(getprop sys.usb.state)\" == *\"rndis\"* ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
-        } else {
-            Log.i("USBTether", "Configuring rndis state via usbgadget");
-            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("echo \"rndis_adb\" > " + configPath + "/strings/0x409/configuration");
-                adbEnabled = true;
-            } else {
-                shellCommand("echo \"rndis\" > " + configPath + "/strings/0x409/configuration");
-            }
-            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
-            //shellCommand("svc usb resetUsbGadget");
-        }
-        if (adbEnabled) {
-            shellCommand("setprop ctl.restart adbd");
-        }
-    }
-
-    static void unconfigureRNDIS(boolean legacyUSB, String gadgetPath, String configPath) {
-        boolean adbEnabled = false;
-        if (legacyUSB || configPath == null) {
-            Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
-            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("setprop sys.usb.config adb");
-                adbEnabled = true;
-            } else {
-                shellCommand("setprop sys.usb.config none");
-            }
-        } else {
-            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
-            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
-                adbEnabled = true;
-            } else {
-                shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
-            }
-            shellCommand("unlink " + configPath + "/usbtether");
-            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
-        }
-        if (adbEnabled) {
-            shellCommand("setprop ctl.restart adbd");
-        }
-    }
-
     static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, Boolean fixTTL, Boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
         // Check that rndis0 is actually available to avoid wasting time
-        if (!shellCommand("ip link set dev " + tetherInterface + " down")) {
-            Log.w("usbtether", "rndis0 unavailable, aborting tether...");
-            return false;
-        } else {
+        if (shellCommand("ip link set dev " + tetherInterface + " down")
+                && configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
             shellCommand("echo 1 > /proc/sys/net/ipv6/conf/all/forwarding");
@@ -446,6 +441,9 @@ public class Script {
             if (dmz) {
                 configureDMZ(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE);
             }
+        } else {
+            Log.w("usbtether", "rndis0 unavailable, aborting tether...");
+            return false;
         }
         return true;
     }
@@ -494,6 +492,17 @@ public class Script {
         shellCommand("echo 0 > /proc/sys/net/ipv6/conf/all/forwarding");
     }
 
+    static void startTPWS(String ipv4Addr, String ipv6Prefix, String libDIR, String appData) {
+        killProcess(appData + "/tpws.pid");
+        shellCommand("rm " + appData + "/tpws.pid");
+        //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
+        shellCommand(libDIR + "/tpws.so --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
+    }
+
+    static void stopTPWS(String appData) {
+        killProcess(appData + "/tpws.pid");
+    }
+
     static void checkProcesses(String ipv4Addr, String ipv6Prefix, String ipv6TYPE, Boolean dnsmasq, String libDIR, String appData, boolean dpiCircumvention) {
         if (dnsmasq) {
             if (!shellCommand("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]")) {
@@ -530,17 +539,6 @@ public class Script {
         }
     }
 
-    static void startTPWS(String ipv4Addr, String ipv6Prefix, String libDIR, String appData) {
-        killProcess(appData + "/tpws.pid");
-        shellCommand("rm " + appData + "/tpws.pid");
-        //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
-        shellCommand(libDIR + "/tpws.so --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
-    }
-
-    static void stopTPWS(String appData) {
-        killProcess(appData + "/tpws.pid");
-    }
-
     // FIXME!!!!!! need to update IPv4 SNAT too!!!!!
     static void refreshSNAT(String tetherInterface, String ipv6Addr, String newAddr) {
         Log.w("USBTether", "Refreshing SNAT IPTables Rule");
@@ -553,7 +551,8 @@ public class Script {
     }
 
     static Boolean testConnection(String upstreamInterface) {
-        if (Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 1.1.1.1").exec().isSuccess() || Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 8.8.8.8").exec().isSuccess()) {
+        if (Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 1.1.1.1").exec().isSuccess()
+                || Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 8.8.8.8").exec().isSuccess()) {
             Log.i("usbtether", upstreamInterface + " IPv4 is online");
             return true;
         }
@@ -562,7 +561,8 @@ public class Script {
     }
 
     static Boolean testConnection6(String upstreamInterface) {
-        if (Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2606:4700:4700::1111").exec().isSuccess() || Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
+        if (Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2606:4700:4700::1111").exec().isSuccess()
+                || Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
             Log.i("usbtether", upstreamInterface + " IPv6 is online");
             return true;
         }
