@@ -183,32 +183,31 @@ public class Script {
         if (usbMode == 0 && (configPath == null || (rndisPath == null && ncmPath == null))) {
             usbMode = 1;
         }
-
-        switch (usbMode) {
-            case 1:
-                Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
-                if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("setprop sys.usb.config adb");
-                } else {
-                    shellCommand("setprop sys.usb.config none");
-                }
-            case 2:
-                Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
-                String postfix = "";
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    postfix = "s";
-                }
-                shellCommand("svc usb setFunction" + postfix);
-            default:
-                Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
-                shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-                if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
-                } else {
-                    shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
-                }
-                shellCommand("unlink " + configPath + "/usbtether");
-                shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+        
+        if (usbMode == 1) {
+            Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config adb");
+            } else {
+                shellCommand("setprop sys.usb.config none");
+            }
+        } else if (usbMode == 2) {
+            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
+            String postfix = "";
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                postfix = "s";
+            }
+            shellCommand("svc usb setFunction" + postfix);
+        } else {
+            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
+            } else {
+                shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
+            }
+            shellCommand("unlink " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
     }
 
