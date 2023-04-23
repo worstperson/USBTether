@@ -204,11 +204,12 @@ public class MainActivity extends AppCompatActivity {
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch dmz_switch = findViewById(R.id.dmz_switch);
         Switch cell_switch = findViewById(R.id.cell_switch);
-        Switch legacy_switch = findViewById(R.id.legacy_switch);
+        Switch ncm_switch = findViewById(R.id.ncm_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
+        Spinner usb_spinner = findViewById(R.id.usb_spinner);
         EditText ipv4_text = findViewById(R.id.ipv4_text);
         EditText wg_text = findViewById(R.id.wg_text);
         EditText bandwidth_text = findViewById(R.id.bandwidth_text);
@@ -231,7 +232,8 @@ public class MainActivity extends AppCompatActivity {
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
-        boolean legacyUSB = sharedPref.getBoolean("legacyUSB", false);
+        int usbMode = sharedPref.getInt("usbMode", 0);
+        boolean preferNCM = sharedPref.getBoolean("preferNCM", false);
 
         boolean hasTTL = Script.hasTTL;
         boolean hasTPROXY = Script.hasTPROXY;
@@ -258,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
         dpi_switch.setChecked(dpiCircumvention);
         dmz_switch.setChecked(dmz);
         cell_switch.setChecked(cellularWatchdog);
-        legacy_switch.setChecked(legacyUSB);
+        ncm_switch.setChecked(preferNCM);
 
         if (!hasTTL) {
             ttl_switch.setEnabled(false);
@@ -313,13 +315,25 @@ public class MainActivity extends AppCompatActivity {
         vpn_spinner.setAdapter(adapter4);
         vpn_spinner.setSelection(autostartVPN);
 
+        ArrayList<String> arraySpinner5 = new ArrayList<>();
+        arraySpinner5.add("Default");
+        arraySpinner5.add("Legacy prop");
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            arraySpinner5.add("Svc command");
+        }
+        ArrayAdapter<String> adapter5 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner5);
+        adapter5.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        usb_spinner.setAdapter(adapter5);
+        // FIXME: add check
+        usb_spinner.setSelection(usbMode);
+
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
             dpi_switch.setEnabled(false);
             dmz_switch.setEnabled(false);
             cell_switch.setEnabled(false);
-            legacy_switch.setEnabled(false);
+            ncm_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -327,6 +341,7 @@ public class MainActivity extends AppCompatActivity {
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
             vpn_spinner.setEnabled(false);
+            usb_spinner.setEnabled(false);
         } else if (autostartVPN > 0) {
             interface_spinner.setEnabled(false);
         }
@@ -349,7 +364,7 @@ public class MainActivity extends AppCompatActivity {
                 dpi_switch.setEnabled(!isChecked);
                 dmz_switch.setEnabled(!isChecked);
                 cell_switch.setEnabled(!isChecked);
-                legacy_switch.setEnabled(!isChecked);
+                ncm_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
                 wg_text.setEnabled(!isChecked);
                 bandwidth_text.setEnabled(!isChecked);
@@ -359,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
                 nat_spinner.setEnabled(!isChecked);
                 prefix_spinner.setEnabled(!isChecked);
                 vpn_spinner.setEnabled(!isChecked);
+                usb_spinner.setEnabled(!isChecked);
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("serviceEnabled", isChecked);
                 edit.apply();
@@ -420,11 +436,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        legacy_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+        ncm_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putBoolean("legacyUSB", isChecked);
+                edit.putBoolean("preferNCM", isChecked);
                 edit.apply();
             }
         });
@@ -505,6 +521,18 @@ public class MainActivity extends AppCompatActivity {
                 } else if (!serviceEnabled) {
                     interface_spinner.setEnabled(true);
                 }
+                edit.apply();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+
+        usb_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putInt("usbMode", position);
                 edit.apply();
             }
             @Override

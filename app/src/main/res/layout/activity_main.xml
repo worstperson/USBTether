@@ -364,7 +364,7 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/legacy_layout"
+                android:id="@+id/usb_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_below="@id/cell_layout"
@@ -377,10 +377,34 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:gravity="center"
-                    android:text="Legacy USB Mode:"
+                    android:text="USB Mode:"
+                    android:textAppearance="?android:attr/textAppearanceMedium" />
+                <Spinner
+                    android:id="@+id/usb_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/ncm_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/usb_layout"
+                android:layout_marginLeft="20pt"
+                android:layout_marginTop="5pt"
+                android:layout_marginRight="20pt"
+                android:layout_marginBottom="5pt"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="Prefer NCM:"
                     android:textAppearance="?android:attr/textAppearanceMedium" />
                 <Switch
-                    android:id="@+id/legacy_switch"
+                    android:id="@+id/ncm_switch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:checked="false" />
