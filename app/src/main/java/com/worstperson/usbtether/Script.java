@@ -141,38 +141,39 @@ public class Script {
             usbMode = 1;
         }
 
-        switch (usbMode) {
-            case 1:
-                Log.i("USBTether", "Configuring USB state via legacy setprop");
-                if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("setprop sys.usb.config rndis,adb");
-                } else {
-                    shellCommand("setprop sys.usb.config rndis");
-                }
-            case 2:
-                Log.i("USBTether", "Configuring USB state via svc");
-                if (preferNCM) { functionName = "ncm"; }
-                String postfix = "";
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    postfix = "s";
-                }
-                if (!Shell.cmd("svc usb getFunction" + postfix).exec().getOut().get(0).contains(functionName)) {
-                    shellCommand("svc usb setFunction" + postfix + " " + functionName);
-                }
-            default:
-                Log.i("USBTether", "Configuring USB state via usbgadget");
-                if ((preferNCM && ncmPath != null) || rndisPath == null) {
-                    functionName = "ncm";
-                    functionPath = ncmPath;
-                }
-                shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-                if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                    shellCommand("echo \"" + functionName + "_adb\" > " + configPath + "/strings/0x409/configuration");
-                } else {
-                    shellCommand("echo \"" + functionName + "\" > " + configPath + "/strings/0x409/configuration");
-                }
-                shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-                shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
+        if (usbMode == 1) {
+            Log.i("USBTether", "Configuring USB state via legacy setprop");
+            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("setprop sys.usb.config rndis,adb");
+            } else {
+                shellCommand("setprop sys.usb.config rndis");
+            }
+        } else if (usbMode == 2) {
+            Log.i("USBTether", "Configuring USB state via svc");
+            if (preferNCM) {
+                functionName = "ncm";
+            }
+            String postfix = "";
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                postfix = "s";
+            }
+            if (!Shell.cmd("svc usb getFunction" + postfix).exec().getOut().get(0).contains(functionName)) {
+                shellCommand("svc usb setFunction" + postfix + " " + functionName);
+            }
+        } else {
+            Log.i("USBTether", "Configuring USB state via usbgadget");
+            if ((preferNCM && ncmPath != null) || rndisPath == null) {
+                functionName = "ncm";
+                functionPath = ncmPath;
+            }
+            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
+            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
+                shellCommand("echo \"" + functionName + "_adb\" > " + configPath + "/strings/0x409/configuration");
+            } else {
+                shellCommand("echo \"" + functionName + "\" > " + configPath + "/strings/0x409/configuration");
+            }
+            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
+            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
         shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ -d /sys/class/net/" + functionName + "0 ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
         return functionName + "0";
