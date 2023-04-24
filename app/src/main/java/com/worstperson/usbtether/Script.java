@@ -183,7 +183,7 @@ public class Script {
         if (usbMode == 0 && (configPath == null || (rndisPath == null && ncmPath == null))) {
             usbMode = 1;
         }
-        
+
         if (usbMode == 1) {
             Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
             if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
@@ -260,7 +260,11 @@ public class Script {
         shellCommand("ip -6 route flush dev " + tetherInterface);
     }
 
-    static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
+    static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, int usbMode) {
+        if (usbMode == 2) {
+            // svc may configure interface, so clear it first
+            unconfigureInterface(tetherInterface);
+        }
         Log.i("USBTether", "Configuring interface");
         return shellCommand("ip link set dev " + tetherInterface + " down")
                 && configureAddresses(tetherInterface, ipv4Addr, ipv6Prefix)
@@ -449,10 +453,10 @@ public class Script {
         }
     }
 
-    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, Boolean fixTTL, Boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
-        // Check that rndis0 is actually available to avoid wasting time
+    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, Boolean fixTTL, Boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, int usbMode) {
+        // Check that tetherInterface is actually available to avoid wasting time
         if (shellCommand("ip link set dev " + tetherInterface + " down")
-                && configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
+                && configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, usbMode)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
             shellCommand("echo 1 > /proc/sys/net/ipv6/conf/all/forwarding");
