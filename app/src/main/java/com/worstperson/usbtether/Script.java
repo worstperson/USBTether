@@ -359,7 +359,7 @@ public class Script {
             addIP6T("mangle", "A", "TPROXY_ROUTE_PREROUTING -d fc00::/7 -j RETURN");
             addIP6T("mangle", "A", "TPROXY_ROUTE_PREROUTING -d fe80::/10 -j RETURN");
             addIP6T("mangle", "A", "TPROXY_ROUTE_PREROUTING -d ff00::/8 -j RETURN");
-            addIP6T("mangle", "N", "TPROXY_ROUTE_PREROUTING");
+            addIP6T("mangle", "N", "TPROXY_MARK_PREROUTING");
             addIP6T("mangle", "A", "TPROXY_ROUTE_PREROUTING -j TPROXY_MARK_PREROUTING");
             addIP6T("mangle", "A", "TPROXY_MARK_PREROUTING -p tcp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
             addIP6T("mangle", "A", "TPROXY_MARK_PREROUTING -p udp -j TPROXY --on-ip ::1 --on-port 1088 --tproxy-mark 1088");
@@ -494,8 +494,8 @@ public class Script {
             if (ipv6TYPE.equals("TPROXY")) {
                 shellCommand("rm " + appData + "/socks.pid");
                 shellCommand("rm " + appData + "/tproxy.pid");
-                shellCommand(libDIR + "/hev-socks5-server.so " + appData + "/socks.yml &");
-                shellCommand(libDIR + "/hev-socks5-tproxy.so " + appData + "/tproxy.yml &");
+                shellCommand(libDIR + "/hevserver.so " + appData + "/socks.yml &");
+                shellCommand(libDIR + "/hevtproxy.so " + appData + "/tproxy.yml &");
             }
             if (dpiCircumvention) {
                 addIPT("nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
@@ -602,12 +602,12 @@ public class Script {
             if (!shellCommand("[ -f " + appData + "/socks.pid -a -d /proc/$(cat " + appData + "/socks.pid) ]")) {
                 Log.w("USBTether", "No socks process, restarting");
                 shellCommand("rm " + appData + "/socks.pid");
-                shellCommand(appData + "/hev-socks5-server." + Build.SUPPORTED_ABIS[0] + " " + appData + "/socks.yml &");
+                shellCommand(appData + "/hevserver." + Build.SUPPORTED_ABIS[0] + " " + appData + "/socks.yml &");
             }
             if (!shellCommand("[ -f " + appData + "/tproxy.pid -a -d /proc/$(cat " + appData + "/tproxy.pid) ]")) {
                 Log.w("USBTether", "No tproxy process, restarting");
                 shellCommand("rm " + appData + "/tproxy.pid");
-                shellCommand(appData + "/hev-socks5-tproxy." + Build.SUPPORTED_ABIS[0] + " " + appData + "/tproxy.yml &");
+                shellCommand(appData + "/hevtproxy." + Build.SUPPORTED_ABIS[0] + " " + appData + "/tproxy.yml &");
             }
         }
     }
