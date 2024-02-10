@@ -68,17 +68,14 @@ public class MainActivity extends AppCompatActivity {
         if (!upstreamInterface.equals("Auto")) {
             arraySpinner.add("Auto");
         }
-        //if (!upstreamInterface.equals("TPROXY")) {
-        //    arraySpinner.add("TPROXY");
-        //}
         Enumeration<NetworkInterface> nets;
         try {
             nets = NetworkInterface.getNetworkInterfaces();
-            for (NetworkInterface netint : Collections.list(nets)){
-                if (netint.isUp() && !netint.isLoopback() && !netint.getName().equals("rndis0")) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())){
-                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(netint.getName())) {
-                            arraySpinner.add(netint.getName());
+            for (NetworkInterface networkInterface : Collections.list(nets)){
+                if (networkInterface.isUp() && !networkInterface.isLoopback() && !networkInterface.getName().equals("rndis0")) {
+                    for (InetAddress inetAddress : Collections.list(networkInterface.getInetAddresses())){
+                        if (inetAddress instanceof Inet4Address && !arraySpinner.contains(networkInterface.getName())) {
+                            arraySpinner.add(networkInterface.getName());
                         }
                     }
                 }
@@ -95,30 +92,32 @@ public class MainActivity extends AppCompatActivity {
     void setNetTextview(TextView net_textview) {
         String name = "UNKNOWN";
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            Network activeNetwork = connectivityManager.getActiveNetwork();
-            if (activeNetwork != null) {
-                name = "";
-                NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
-                if (!networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
-                    name = " (UNKNOWN)";
-                    boolean usesCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
-                    Network[] networks = connectivityManager.getAllNetworks();
-                    for (Network network : networks) {
-                        NetworkCapabilities upstreamCapabilities = connectivityManager.getNetworkCapabilities(network);
-                        if (upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
-                                upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                            if (upstreamCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == usesCellular) {
-                                name = " (" + connectivityManager.getLinkProperties(network).getInterfaceName() + ")";
-                                break;
-                            }
+        Network activeNetwork;
+        if (connectivityManager != null && (activeNetwork = connectivityManager.getActiveNetwork()) != null) {
+            name = "";
+            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
+            if (networkCapabilities != null && !networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
+                name = " (UNKNOWN)";
+                boolean usesCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+                Network[] networks = connectivityManager.getAllNetworks();
+                for (Network network : networks) {
+                    NetworkCapabilities upstreamCapabilities = connectivityManager.getNetworkCapabilities(network);
+                    if (upstreamCapabilities != null && upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                            upstreamCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                            (upstreamCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == usesCellular)) {
+                        LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
+                        String interfaceName;
+                        if (linkProperties != null && (interfaceName = linkProperties.getInterfaceName()) != null) {
+                            name = " (" + interfaceName + ")";
+                            break;
                         }
                     }
                 }
-                LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
-                if (linkProperties != null) {
-                    name = linkProperties.getInterfaceName() + name;
-                }
+            }
+            LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
+            String interfaceName;
+            if (linkProperties != null && (interfaceName = linkProperties.getInterfaceName()) != null) {
+                name = interfaceName + name;
             }
         }
         net_textview.setText(name);
@@ -204,12 +203,10 @@ public class MainActivity extends AppCompatActivity {
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch dmz_switch = findViewById(R.id.dmz_switch);
         Switch cell_switch = findViewById(R.id.cell_switch);
-        Switch ncm_switch = findViewById(R.id.ncm_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
         Spinner nat_spinner = findViewById(R.id.nat_spinner);
         Spinner prefix_spinner = findViewById(R.id.prefix_spinner);
-        Spinner usb_spinner = findViewById(R.id.usb_spinner);
         EditText ipv4_text = findViewById(R.id.ipv4_text);
         EditText wg_text = findViewById(R.id.wg_text);
         EditText bandwidth_text = findViewById(R.id.bandwidth_text);
@@ -232,8 +229,12 @@ public class MainActivity extends AppCompatActivity {
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
-        int usbMode = sharedPref.getInt("usbMode", 0);
-        boolean preferNCM = sharedPref.getBoolean("preferNCM", false);
+
+        assert upstreamInterface != null;
+        assert ipv6TYPE != null;
+        assert ipv4Addr != null;
+        assert wireguardProfile != null;
+        assert clientBandwidth != null;
 
         boolean hasTTL = Script.hasTTL;
         boolean hasTPROXY = Script.hasTPROXY;
@@ -260,7 +261,6 @@ public class MainActivity extends AppCompatActivity {
         dpi_switch.setChecked(dpiCircumvention);
         dmz_switch.setChecked(dmz);
         cell_switch.setChecked(cellularWatchdog);
-        ncm_switch.setChecked(preferNCM);
 
         if (!hasTTL) {
             ttl_switch.setEnabled(false);
@@ -315,25 +315,12 @@ public class MainActivity extends AppCompatActivity {
         vpn_spinner.setAdapter(adapter4);
         vpn_spinner.setSelection(autostartVPN);
 
-        ArrayList<String> arraySpinner5 = new ArrayList<>();
-        arraySpinner5.add("Default");
-        arraySpinner5.add("Legacy prop");
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            arraySpinner5.add("Svc command");
-        }
-        ArrayAdapter<String> adapter5 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner5);
-        adapter5.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        usb_spinner.setAdapter(adapter5);
-        // FIXME: add check
-        usb_spinner.setSelection(usbMode);
-
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
             ttl_switch.setEnabled(false);
             dpi_switch.setEnabled(false);
             dmz_switch.setEnabled(false);
             cell_switch.setEnabled(false);
-            ncm_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
@@ -341,7 +328,6 @@ public class MainActivity extends AppCompatActivity {
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
             vpn_spinner.setEnabled(false);
-            usb_spinner.setEnabled(false);
         } else if (autostartVPN > 0) {
             interface_spinner.setEnabled(false);
         }
@@ -364,7 +350,6 @@ public class MainActivity extends AppCompatActivity {
                 dpi_switch.setEnabled(!isChecked);
                 dmz_switch.setEnabled(!isChecked);
                 cell_switch.setEnabled(!isChecked);
-                ncm_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
                 wg_text.setEnabled(!isChecked);
                 bandwidth_text.setEnabled(!isChecked);
@@ -374,7 +359,6 @@ public class MainActivity extends AppCompatActivity {
                 nat_spinner.setEnabled(!isChecked);
                 prefix_spinner.setEnabled(!isChecked);
                 vpn_spinner.setEnabled(!isChecked);
-                usb_spinner.setEnabled(!isChecked);
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("serviceEnabled", isChecked);
                 edit.apply();
@@ -436,15 +420,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        ncm_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putBoolean("preferNCM", isChecked);
-                edit.apply();
-            }
-        });
-
         interface_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
@@ -491,10 +466,11 @@ public class MainActivity extends AppCompatActivity {
         vpn_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
-                String upstreamInterface = "";
+                // Set default value
+                String upstreamInterface = "Auto";
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-                boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
+                assert wireguardProfile != null;
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putInt("autostartVPN", position);
                 switch (position) {
@@ -504,35 +480,18 @@ public class MainActivity extends AppCompatActivity {
                     case 1: case 2:
                         wgp_layout.setVisibility(View.VISIBLE);
                         if (position == 1) {
-                            upstreamInterface = "tun0";
+                            upstreamInterface = "tun";
                         } else {
                             upstreamInterface = wireguardProfile;
                         }
                         break;
                     default:
                         wgp_layout.setVisibility(View.GONE);
-                        upstreamInterface = "tun0";
-
+                        upstreamInterface = "tun";
                 }
-                if (position > 0) {
-                    interface_spinner.setEnabled(false);
-                    setInterfaceSpinner(upstreamInterface, interface_spinner);
-                    edit.putString("upstreamInterface", upstreamInterface);
-                } else if (!serviceEnabled) {
-                    interface_spinner.setEnabled(true);
-                }
-                edit.apply();
-            }
-            @Override
-            public void onNothingSelected(AdapterView<?> adapterView) {
-            }
-        });
-
-        usb_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
-                SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putInt("usbMode", position);
+                interface_spinner.setEnabled(position == 0);
+                setInterfaceSpinner(upstreamInterface, interface_spinner);
+                edit.putString("upstreamInterface", upstreamInterface);
                 edit.apply();
             }
             @Override
@@ -618,6 +577,8 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
+        assert upstreamInterface != null;
+        assert ipv4Addr != null;
 
         setInterfaceSpinner(upstreamInterface, interface_spinner);
         ipv4_text.setText(ipv4Addr);

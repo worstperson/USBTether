@@ -31,6 +31,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -38,10 +39,11 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
 import androidx.core.os.HandlerCompat;
 import androidx.core.app.NotificationCompat;
 
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -51,23 +53,21 @@ import java.util.Collections;
 public class ForegroundService extends Service {
 
     public static final String CHANNEL_ID = "ForegroundServiceChannel";
+    public static String networkStatus = "Configuring network";
+    public static String usbStatus = "USB disconnected";
 
     PowerManager powerManager;
     WakeLock wakeLock;
 
-    static public Boolean isStarted = false;
+    public static boolean isStarted = false;
     private boolean natApplied = false;
     private boolean needsReset = false;
     private boolean usbReconnect = false;
     private boolean watchdogActive = false;
     private int offlineCounter = 0;
 
-    private String gadgetPath = null;
-    private String configPath = null;
-    private String rndisPath = null;
-    private String ncmPath = null;
-
     private String usbInterface;
+    final private String tetherInterface = "usbt0";
 
     NotificationCompat.Builder notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -79,7 +79,7 @@ public class ForegroundService extends Service {
         @Override
         public void run() {
             watchdogActive = false;
-            if (isStarted && Script.isUSBConfigured()) {
+            if (isStarted) {
                 restoreTether();
             }
         }
@@ -90,35 +90,31 @@ public class ForegroundService extends Service {
         Network[] networks = connectivityManager.getAllNetworks();
         for (Network network : networks) {
             NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
-            if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+            if (networkCapabilities != null && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
                     networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                     networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-                /*String mobileNetwork = connectivityManager.getLinkProperties(network).getInterfaceName();
-                try {
-                    // Do not return clat interfaces
-                    // TODO: this is probably not needed, but I can't test atm
-                    NetworkInterface checkInterface = NetworkInterface.getByName(mobileNetwork);
-                    if (checkInterface != null && !checkInterface.isPointToPoint()) {
-                        return mobileNetwork;
-                    }
-                } catch (SocketException e) {
-                    e.printStackTrace();
-                }*/
-                connectivityManager.getLinkProperties(network).getInterfaceName();
+                LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
+                if (linkProperties != null) {
+                    return linkProperties.getInterfaceName();
+                }
             }
         }
         return null;
     }
 
-    private String pickInterface(String upstreamInterface) {
-        if (upstreamInterface.equals("Auto")) {
+    private String pickInterface(String upstreamInterface, int autostartVPN) {
+        if (upstreamInterface.equals("Auto") || autostartVPN == 1 || autostartVPN >= 3) {
             ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
             if (connectivityManager != null) {
                 Network activeNetwork = connectivityManager.getActiveNetwork();
                 if (activeNetwork != null) {
                     LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
                     if (linkProperties != null) {
-                        return linkProperties.getInterfaceName();
+                        String interfaceName = linkProperties.getInterfaceName();
+                        // VPN interfaces can be incremented so definitions exclude it
+                        if (interfaceName != null && (upstreamInterface.equals("Auto") || interfaceName.startsWith(upstreamInterface))) {
+                            return interfaceName;
+                        }
                     }
                 }
             }
@@ -127,13 +123,13 @@ public class ForegroundService extends Service {
         return upstreamInterface;
     }
 
-    private String setupSNAT(String upstreamInterface, Boolean ipv6SNAT) {
+    private String setupSNAT(String upstreamInterface, boolean ipv6SNAT) {
         String ipv6Addr = "";
         try {
             if (ipv6SNAT) {
-                NetworkInterface netint = NetworkInterface.getByName(upstreamInterface);
-                if (netint != null) {
-                    for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                NetworkInterface networkInterface = NetworkInterface.getByName(upstreamInterface);
+                if (networkInterface != null) {
+                    for (InetAddress inetAddress : Collections.list(networkInterface.getInetAddresses())) {
                         if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress()) {
                             ipv6Addr = inetAddress.getHostAddress();
                             break;
@@ -147,60 +143,41 @@ public class ForegroundService extends Service {
         return ipv6Addr;
     }
 
-    private void startVPN(int autostartVPN, String wireguardProfile, boolean resetVPN) {
+    private void startVPN(int autostartVPN, String wireguardProfile) {
         if (autostartVPN == 1 || autostartVPN == 2) {
-            if (resetVPN) {
-                Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
-                i.setPackage("com.wireguard.android");
-                i.putExtra("tunnel", wireguardProfile);
-                sendBroadcast(i);
-            }
-            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
+            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
             i.setPackage("com.wireguard.android");
             i.putExtra("tunnel", wireguardProfile);
             sendBroadcast(i);
-        } else {
-            if (autostartVPN == 3) {
-                if (resetVPN) {
-                    Script.stopGoogleOneVPN();
-                }
-                Script.startGoogleOneVPN();
-            } else if (autostartVPN == 4) {
-                if (resetVPN) {
-                    Script.stopCloudflare1111Warp();
-                }
-                Script.startCloudflare1111Warp();
-            }
-        }
-    }
-
-    /*private void stopVPN(int autostartVPN, String wireguardProfile) {
-        if (autostartVPN == 1 || autostartVPN == 2) {
-            Intent i = new Intent("com.wireguard.android.action.SET_TUNNEL_DOWN");
+            i = new Intent("com.wireguard.android.action.SET_TUNNEL_UP");
             i.setPackage("com.wireguard.android");
             i.putExtra("tunnel", wireguardProfile);
             sendBroadcast(i);
         } else {
             if (autostartVPN == 3) {
                 Script.stopGoogleOneVPN();
+                Script.startGoogleOneVPN();
             } else if (autostartVPN == 4) {
                 Script.stopCloudflare1111Warp();
+                Script.startCloudflare1111Warp();
             }
         }
-    }*/
+    }
 
     private String getPrefix(String iface, String ipv6Prefix) {
         try {
-            NetworkInterface netint = NetworkInterface.getByName(iface);
-            if (netint != null) {
-                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+            NetworkInterface networkInterface = NetworkInterface.getByName(iface);
+            if (networkInterface != null) {
+                for (InetAddress inetAddress : Collections.list(networkInterface.getInetAddresses())) {
                     if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress() && inetAddress.getHostAddress() != null && !inetAddress.getHostAddress().equals(ipv6Prefix + "1")) {
                         String ipv6Addr = inetAddress.getHostAddress();
                         if (ipv6Addr.contains("::")) {
-                            return ipv6Addr.split("::")[0];
+                            return ipv6Addr.substring(0, ipv6Addr.indexOf("::"));
                         } else {
-                            String[] tmp = ipv6Addr.split(":");
-                            return tmp[0] + ":" + tmp[1] + ":" + tmp[2] + ":" + tmp[3];
+                            int count = 0;
+                            for (int i = 0; i < ipv6Addr.length(); i++)
+                                if (ipv6Addr.charAt(i) == ':' && ++count == 4)
+                                    return ipv6Addr.substring(0, i);
                         }
                     }
                 }
@@ -211,20 +188,17 @@ public class ForegroundService extends Service {
         return null;
     }
 
-    private boolean hasXlat(String currentInterface) {
-        try { //Check for separate CLAT interface
-            NetworkInterface netint = NetworkInterface.getByName("v4-" + currentInterface);
-            if (netint != null) {
-                for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
-                    if (inetAddress instanceof Inet4Address) {
-                        return true;
-                    }
-                }
+    private String hasXlat(String currentInterface) {
+        String clatInterface = "v4-" + currentInterface;
+        try {
+            NetworkInterface networkInterface = NetworkInterface.getByName(clatInterface);
+            if (networkInterface != null) {
+                return clatInterface;
             }
         } catch (SocketException e) {
             e.printStackTrace();
         }
-        return false;
+        return currentInterface;
     }
 
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
@@ -238,215 +212,229 @@ public class ForegroundService extends Service {
         String lastIPv6Interface = sharedPref.getString("lastIPv6Interface", "");
         String lastIPv6 = sharedPref.getString("lastIPv6", "");
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
-        Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         boolean dmz = sharedPref.getBoolean("dmz", false);
-        Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
+        boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         int autostartVPN = sharedPref.getInt("autostartVPN", 0);
         String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
-        int usbMode = sharedPref.getInt("usbMode", 0);
-        boolean preferNCM = sharedPref.getBoolean("preferNCM", false);
 
-        String currentIPv6Interface = pickInterface(upstreamInterface);
-        if (currentIPv6Interface != null && !currentIPv6Interface.equals("") && !currentIPv6Interface.equals("Auto")) {
-            Log.i("USBTether", "Checking connection availability...");
-            String cellularIface = isCellularActive();
-            if (!cellularWatchdog || (cellularIface != null && (Script.testConnection(cellularIface) || Script.testConnection6(cellularIface)))) {                NetworkInterface checkInterface;
-                boolean isUp = false;
-                boolean ipv4UP = false;
-                boolean ipv6UP = false;
-                String currentIPv4Interface = currentIPv6Interface;
-                try {
-                    checkInterface = NetworkInterface.getByName(currentIPv6Interface);
-                    if (checkInterface != null) { // Exception passed try block; Stop being lazy
-                        isUp = checkInterface.isUp();
-                        if (isUp) {
-                            if (!natApplied && currentIPv6Interface.startsWith("rmnet")) {
-                                if (hasXlat(currentIPv6Interface)) {
-                                    currentIPv4Interface = "v4-" + currentIPv4Interface;
-                                }
-                            }
-                            ipv4UP = Script.testConnection(currentIPv4Interface);
-                            ipv6UP = (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) ? Script.testConnection6(currentIPv6Interface) : true;
-                        }
-                    }
-                } catch (SocketException e) {
-                    e.printStackTrace();
+        // Just used to suppress warnings, they should never be null
+        assert upstreamInterface != null;
+        assert lastIPv4Interface != null;
+        assert lastIPv6Interface != null;
+        assert lastIPv6 != null;
+        assert ipv6TYPE != null;
+        assert ipv4Addr != null;
+        assert wireguardProfile != null;
+        assert clientBandwidth != null;
+
+        String currentIPv6Interface = pickInterface(upstreamInterface, autostartVPN);
+        String currentIPv4Interface = currentIPv6Interface;
+
+        Log.i("USBTether", "Checking connection availability...");
+        String cellularIPv6 = null;
+        boolean cellularUP = true;
+        if (cellularWatchdog) {
+            cellularIPv6 = isCellularActive();
+            if (cellularIPv6 != null) {
+                String cellularIPv4 = hasXlat(cellularIPv6);
+                if (currentIPv6Interface == null || !currentIPv6Interface.equals(cellularIPv6)) {
+                    // Only check that any protocol is working, it's not the tethered network so we don't care if just one goes down
+                    // Keeps from having to pull APN configs, check for plat servers, and get caught in loops during partial outages
+                    cellularUP = Script.testConnection(cellularIPv4, false) || Script.testConnection(cellularIPv6, true);
+                } else {
+                    currentIPv4Interface = cellularIPv4;
                 }
-                if (isUp && ipv4UP && ipv6UP) {
-                    offlineCounter = 0;
-                    if (!natApplied || (upstreamInterface.equals("Auto") && !currentIPv6Interface.equals(lastIPv6Interface))) {
-                        // Configure Tether
-                        if (!natApplied) {
-                            Log.i("USBTether", "Starting tether operation...");
-                        } else {
-                            Log.i("USBTether", "Network changed, resetting interface...");
-                            Script.unconfigureTether(usbInterface, lastIPv4Interface, lastIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                            natApplied = false;
-                        }
-                        String ipv6Addr = setupSNAT(currentIPv6Interface, ipv6TYPE.equals("SNAT"));
-                        SharedPreferences.Editor edit = sharedPref.edit();
-                        edit.putString("lastIPv4Interface", currentIPv4Interface);
-                        edit.putString("lastIPv6Interface", currentIPv6Interface);
-                        edit.putString("lastIPv6", ipv6Addr);
-                        edit.apply();
-                        if (Script.configureTether(usbInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, fixTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz, usbMode)) {
-                            natApplied = true;
-                            // Start bound services
-                            if (dpiCircumvention) {
-                                Script.startTPWS(ipv4Addr, ipv6Prefix, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
-                            }
-                            if (ipv6TYPE.equals("TPROXY")) {
-                                // Add TPROXY exception
-                                String tmp = getPrefix(currentIPv6Interface, ipv6Prefix);
-                                if (tmp != null) {
-                                    Log.i("TetherTPROXY", tmp);
-                                    Script.setTPROXYRoute(tmp);
-                                }
-                            }
-                            notification.setContentTitle("Service is running, Connected");
-                            mNotificationManager.notify(1, notification.build());
-                        } else {
-                            Log.w("USBTether", "Failed configuring tether, resetting interface...");
-                            Script.unconfigureInterface(usbInterface);
-                            Script.unconfigureRNDIS(usbMode, gadgetPath, configPath, rndisPath, ncmPath);
-                            usbInterface = Script.configureRNDIS(usbMode, preferNCM, gadgetPath, configPath, rndisPath, ncmPath);
-                            if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                                Log.i("USBTether", "Resetting interface, creating callback to retry tether in 5 seconds...");
-                                handler.postDelayed(delayedRestore, 5000);
-                                notification.setContentTitle("Service is running, resetting interface after failure");
-                                mNotificationManager.notify(1, notification.build());
-                            }
-                        }
+            } else {
+                cellularUP = false;
+            }
+        }
+        if (cellularUP) {
+            if (currentIPv6Interface != null && Script.testConnection(currentIPv4Interface, false) && ((!ipv6TYPE.equals("MASQUERADE") && !ipv6TYPE.equals("SNAT")) || Script.testConnection(currentIPv6Interface, true))) {
+                offlineCounter = 0;
+                if (!natApplied || (upstreamInterface.equals("Auto") && !currentIPv6Interface.equals(lastIPv6Interface))) {
+                    // Configure Tether
+                    if (!natApplied) {
+                        Log.i("USBTether", "Starting tether operation...");
                     } else {
-                        // Restore Tether
-                        if (needsReset) {
-                            Log.i("USBTether", "Restoring tether...");
-                            // Update SNAT if needed
-                            String newAddr = setupSNAT(currentIPv6Interface, ipv6TYPE.equals("SNAT"));
-                            if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
-                                Script.refreshSNAT(currentIPv6Interface, lastIPv6, newAddr);
-                                SharedPreferences.Editor edit = sharedPref.edit();
-                                edit.putString("lastIPv6", newAddr);
-                                edit.apply();
-                            }
-                            if (ipv6TYPE.equals("TPROXY")) {
-                                // Add TPROXY exception
-                                String tmp = getPrefix(currentIPv6Interface, ipv6Prefix);
-                                if (tmp != null) {
-                                    Log.i("TetherTPROXY", tmp);
-                                    Script.setTPROXYRoute(tmp);
-                                }
-                            }
-                            if (usbReconnect) {
-                                Script.unconfigureInterface(usbInterface);
-                                if (Script.configureInterface(usbInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, usbMode)) {
-                                    // Start bound services
-                                    if (dpiCircumvention) {
-                                        Script.startTPWS(ipv4Addr, ipv6Prefix, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
-                                    }
-                                    notification.setContentTitle("Service is running, Connected");
-                                    mNotificationManager.notify(1, notification.build());
-                                } else {
-                                    Log.w("USBTether", "Failed to restore after USB reset, resetting interface...");
-                                    Script.unconfigureTether(usbInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-                                    Script.unconfigureRNDIS(usbMode, gadgetPath, configPath, rndisPath, ncmPath);
-                                    usbInterface = Script.configureRNDIS(usbMode, preferNCM, gadgetPath, configPath, rndisPath, ncmPath);
-                                    natApplied = false;
-                                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                                        Log.i("USBTether", "Resetting interface, creating callback to retry tether in 5 seconds...");
-                                        handler.postDelayed(delayedRestore, 5000);
-                                        notification.setContentTitle("Service is running, resetting interface after failure");
-                                        mNotificationManager.notify(1, notification.build());
-                                    }
-                                }
-                            } else {
-                                // Brings tether back up on connection change
-                                Script.unconfigureRules();
-                                Script.configureRules(usbInterface, currentIPv4Interface, currentIPv6Interface);
-                                notification.setContentTitle("Service is running, Connected");
-                                mNotificationManager.notify(1, notification.build());
-                            }
-                            usbReconnect = false;
-                            needsReset = false;
-                        } else {
-                            if (dnsmasq || dpiCircumvention || ipv6TYPE.equals("TPROXY")) {
-                                Log.i("USBTether", "Checking processes...");
-                                Script.checkProcesses(ipv4Addr, ipv6Prefix, ipv6TYPE, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), dpiCircumvention);
-                            }
-                            notification.setContentTitle("Service is running, Connected");
-                            mNotificationManager.notify(1, notification.build());
-                        }
+                        Log.i("USBTether", "Network changed, resetting interface...");
+                        Script.unconfigureTether(tetherInterface, lastIPv4Interface, lastIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+                        natApplied = false;
                     }
-                    // Start watchdog if nothing else is scheduled
-                    if (autostartVPN > 0 || cellularWatchdog || dnsmasq || dpiCircumvention || ipv6TYPE.equals("TPROXY")) {
+                    String ipv6Addr = setupSNAT(currentIPv6Interface, ipv6TYPE.equals("SNAT"));
+                    SharedPreferences.Editor edit = sharedPref.edit();
+                    edit.putString("lastIPv4Interface", currentIPv4Interface);
+                    edit.putString("lastIPv6Interface", currentIPv6Interface);
+                    edit.putString("lastIPv6", ipv6Addr);
+                    edit.apply();
+                    if (Script.configureTether(tetherInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, fixTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz)) {
+                        natApplied = true;
+                        if (ipv6TYPE.equals("TPROXY")) {
+                            // Add TPROXY exception
+                            String prefix = getPrefix(currentIPv6Interface, ipv6Prefix);
+                            if (prefix != null) {
+                                Log.i("TetherTPROXY", prefix);
+                                Script.setTPROXYRoute(prefix);
+                            }
+                        }
+                        networkStatus = "Tether is configured";
+                        notification.setContentTitle(networkStatus + ", " + usbStatus);
+                        mNotificationManager.notify(1, notification.build());
+                    } else {
+                        Log.w("USBTether", "Failed configuring tether, resetting interface...");
+                        Script.unconfigureInterface(tetherInterface);
+                        Script.unconfigureRNDIS(getApplicationInfo().nativeLibraryDir);
+                        usbInterface = Script.configureRNDIS(getApplicationInfo().nativeLibraryDir);
                         if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                            watchdogActive = true;
-                            Log.i("USBTether", "Creating callback to check tether in 60 seconds...");
-                            handler.postDelayed(delayedRestore, 60000);
+                            Log.i("USBTether", "Resetting interface, creating callback to retry tether in 5 seconds...");
+                            handler.postDelayed(delayedRestore, 5000);
+                            networkStatus = "Retrying after configuration failure";
+                            notification.setContentTitle(networkStatus + ", " + usbStatus);
+                            mNotificationManager.notify(1, notification.build());
                         }
-                    }
-                } else if (autostartVPN > 0) {
-                    boolean resetVPN = !natApplied || offlineCounter >= 5;
-                    if (resetVPN) {
-                        offlineCounter = 0;
-                        Log.w("USBTether", "VPN connection is DOWN, restarting...");
-                        //stopVPN(autostartVPN, wireguardProfile);
-                        startVPN(autostartVPN, wireguardProfile, true);
-                        if (natApplied) {
-                            needsReset = true;
-                        }
-                    } else {
-                        offlineCounter += 1;
-                        Log.i("USBTether", "VPN offline, waiting on counter");
-                        notification.setContentTitle("Service is running, VPN offline");
-                        mNotificationManager.notify(1, notification.build());
-                    }
-                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                        Log.i("USBTether", "Waiting for VPN, creating callback to restore tether in 5 seconds...");
-                        handler.postDelayed(delayedRestore, 5000);
-                        notification.setContentTitle("Service is running, waiting for VPN network");
-                        mNotificationManager.notify(1, notification.build());
                     }
                 } else {
-                    // network down, no recourse
-                    offlineCounter = offlineCounter + 1;
-                    Log.w("USBTether", "Failed, tether interface unavailable");
+                    // Restore Tether
+                    if (needsReset) {
+                        Log.i("USBTether", "Restoring tether...");
+                        // Update SNAT if needed
+                        String newAddr = setupSNAT(currentIPv6Interface, ipv6TYPE.equals("SNAT"));
+                        if (!newAddr.equals("") && !newAddr.equals(lastIPv6)) {
+                            Script.refreshSNAT(currentIPv6Interface, lastIPv6, newAddr);
+                            SharedPreferences.Editor edit = sharedPref.edit();
+                            edit.putString("lastIPv6", newAddr);
+                            edit.apply();
+                        }
+                        if (ipv6TYPE.equals("TPROXY")) {
+                            // Add TPROXY exception
+                            String prefix = getPrefix(currentIPv6Interface, ipv6Prefix);
+                            if (prefix != null) {
+                                Log.i("TetherTPROXY", prefix);
+                                Script.setTPROXYRoute(prefix);
+                            }
+                        }
+                        if (usbReconnect) {
+                            Script.unconfigureInterface(tetherInterface);
+                            if (Script.configureInterface(tetherInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix)) {
+                                networkStatus = "Tether is configured";
+                                notification.setContentTitle(networkStatus + ", " + usbStatus);
+                                mNotificationManager.notify(1, notification.build());
+                            } else {
+                                Log.w("USBTether", "Failed to restore after USB reset, resetting interface...");
+                                Script.unconfigureTether(tetherInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+                                Script.unconfigureRNDIS(getApplicationInfo().nativeLibraryDir);
+                                usbInterface = Script.configureRNDIS(getApplicationInfo().nativeLibraryDir);
+                                natApplied = false;
+                                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                                    Log.i("USBTether", "Resetting interface, creating callback to retry tether in 5 seconds...");
+                                    handler.postDelayed(delayedRestore, 5000);
+                                    networkStatus = "Retrying after configuration failure";
+                                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                                    mNotificationManager.notify(1, notification.build());
+                                }
+                            }
+                        } else {
+                            // Brings tether back up on connection change
+                            Script.unconfigureRules();
+                            Script.configureRules(tetherInterface, currentIPv4Interface, currentIPv6Interface);
+                            networkStatus = "Tether is configured";
+                            notification.setContentTitle(networkStatus + ", " + usbStatus);
+                            mNotificationManager.notify(1, notification.build());
+                        }
+                        usbReconnect = false;
+                        needsReset = false;
+                    } else {
+                        if (dnsmasq || dpiCircumvention || ipv6TYPE.equals("TPROXY")) {
+                            Log.i("USBTether", "Checking processes...");
+                            Script.checkProcesses(ipv4Addr, ipv6Prefix, ipv6TYPE, dnsmasq, dpiCircumvention, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath());
+                        }
+                        networkStatus = "Tether is configured";
+                        notification.setContentTitle(networkStatus + ", " + usbStatus);
+                        mNotificationManager.notify(1, notification.build());
+                    }
+                }
+                // Start watchdog if nothing else is scheduled
+                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                    watchdogActive = true;
+                    Log.i("USBTether", "Creating callback to check tether in 120 seconds...");
+                    handler.postDelayed(delayedRestore, 120000);
+                }
+            } else if (autostartVPN > 0) {
+                // Reset VPN if tether hasn't been applied, interface is missing, or has been offline for 25 seconds
+                boolean resetVPN = !natApplied || currentIPv6Interface == null || offlineCounter >= 5;
+                if (resetVPN) {
+                    offlineCounter = 0;
+                    Log.w("USBTether", "VPN connection is DOWN, restarting...");
+                    startVPN(autostartVPN, wireguardProfile);
                     if (natApplied) {
                         needsReset = true;
                     }
                     if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                        Log.i("USBTether", "Waiting for network, creating callback to restore tether in 5 seconds...");
+                        Log.i("USBTether", "Waiting for VPN, creating callback to restore tether in 15 seconds...");
+                        handler.postDelayed(delayedRestore, 15000);
+                        networkStatus = "Waiting for VPN network";
+                        notification.setContentTitle(networkStatus + ", " + usbStatus);
+                        mNotificationManager.notify(1, notification.build());
+                    }
+                } else {
+                    offlineCounter += 1;
+                    Log.i("USBTether", "VPN offline, waiting on counter");
+                    if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                        Log.i("USBTether", "Waiting for VPN, creating callback to restore tether in 5 seconds...");
                         handler.postDelayed(delayedRestore, 5000);
-                        notification.setContentTitle("Service is running, waiting for network availability");
+                        networkStatus = "Waiting for VPN network";
+                        notification.setContentTitle(networkStatus + ", " + usbStatus);
                         mNotificationManager.notify(1, notification.build());
                     }
                 }
             } else {
-                // FIXME - don't call this if upstream has connectivity!!!!
+                // network down, no recourse
+                offlineCounter = offlineCounter + 1;
+                Log.w("USBTether", "Failed, tether interface unavailable");
+                if (natApplied) {
+                    needsReset = true;
+                }
+                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                    Log.i("USBTether", "Waiting for network, creating callback to restore tether in 5 seconds...");
+                    handler.postDelayed(delayedRestore, 5000);
+                    networkStatus = "Waiting for network availability";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                    mNotificationManager.notify(1, notification.build());
+                }
+            }
+        } else {
+            // Reset cellular if tether hasn't been applied, interface is missing, or has been offline for 25 seconds
+            boolean resetCellular = !natApplied || cellularIPv6 == null || offlineCounter >= 5;
+            if (resetCellular) {
+                offlineCounter = 0;
                 Log.w("USBTether", "Cellular connection is DOWN, attempting recovery");
                 Script.recoverDataConnection();
                 if (natApplied) {
                     needsReset = true;
                 }
                 if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                    Log.i("USBTether", "Recovering cellular connection, creating callback to restore tether in 5 seconds...");
+                    Log.i("USBTether", "Recovering cellular connection, creating callback to restore tether in 30 seconds...");
+                    handler.postDelayed(delayedRestore, 30000);
+                    networkStatus = "Recovering cellular connection";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                    mNotificationManager.notify(1, notification.build());
+                }
+            } else {
+                offlineCounter += 1;
+                Log.i("USBTether", "Cellular offline, waiting on counter");
+                if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                    Log.i("USBTether", "Waiting for cellular network, creating callback to restore tether in 5 seconds...");
                     handler.postDelayed(delayedRestore, 5000);
-                    notification.setContentTitle("Service is running, recovering cellular connection...");
+                    networkStatus = "Waiting for cellular network";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
                     mNotificationManager.notify(1, notification.build());
                 }
             }
-        } else {
-            Log.w("USBTether", "Tether failed, invalid interface");
-            if (natApplied) {
-                needsReset = true;
-            }
-            notification.setContentTitle("Service is running, no upstream interface");
-            mNotificationManager.notify(1, notification.build());
         }
     }
 
@@ -456,166 +444,122 @@ public class ForegroundService extends Service {
     private final BroadcastReceiver USBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-
             NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-
             Log.i("USBTether", "Recieved USB_STATE broadcast");
-            if (intent.getExtras().getBoolean("connected")) {
-                Log.i("USBTether", "USB Connected");
-                if (intent.getExtras().getBoolean("configured")) {
-                    Log.i("USBTether", "USB Configured");
-                    if (natApplied) {
-                        // Fix for Google One VPN
-                        needsReset = true;
-                    }
-                    boolean hasCallback = HandlerCompat.hasCallbacks(handler, delayedRestore);
-                    if (watchdogActive && hasCallback) {
-                        Log.i("USBTether", "Clearing watchdog after network change");
-                        handler.removeCallbacks(delayedRestore);
-                        watchdogActive = false;
-                        hasCallback = false;
-                    }
-                    if (!hasCallback) {
-                        if (natApplied && !usbReconnect) {
-                            // Restore right away if there was no disconnect event
-                            restoreTether();
-                        } else {
-                            Log.i("USBTether", "Configuring interface, creating callback to restore tether in 5 seconds...");
-                            handler.postDelayed(delayedRestore, 5000);
-                            notification.setContentTitle("Service is running, configuring interface");
-                            mNotificationManager.notify(1, notification.build());
-                        }
+            Bundle extras = intent.getExtras();
+            if (extras != null) { // Work around this? Can always pull from sysfs
+                if (extras.getBoolean("connected")) {
+                    Log.i("USBTether", "USB Connected");
+                    if (extras.getBoolean("configured")) {
+                        Log.i("USBTether", "USB Configured");
+                        Script.bindBridge(tetherInterface, usbInterface);
+                        usbStatus = "USB connected";
+                        notification.setContentTitle(networkStatus + ", " + usbStatus);
+                        mNotificationManager.notify(1, notification.build());
                     } else {
-                        Log.i("USBTether", "Tether restore callback already scheduled");
+                        Log.i("USBTether", "USB Not Configured");
                     }
                 } else {
-                    Log.i("USBTether", "USB Not Configured");
+                    Log.i("USBTether", "USB Disconnected");
+                    usbStatus = "USB disconnected";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                    mNotificationManager.notify(1, notification.build());
                 }
-            } else {
-                Log.i("USBTether", "USB Disconnected");
-                if (natApplied) {
-                    needsReset = true;
-                    usbReconnect = true;
-                }
-                // Stop bound services
-                Script.stopTPWS(getFilesDir().getPath());
-                if (HandlerCompat.hasCallbacks(handler, delayedRestore)) {
-                    Log.i("USBTether", "USB Disconnected, removing tether restore callback");
-                    handler.removeCallbacks(delayedRestore);
-                }
-                notification.setContentTitle("Service is running, USB disconnected");
-                mNotificationManager.notify(1, notification.build());
             }
         }
     };
 
     private final ConnectivityManager.NetworkCallback NETReceiver = new ConnectivityManager.NetworkCallback() {
-
-        /*@Override
-        public void onAvailable(Network network) {
-            super.onAvailable(network);
-
-            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
-            String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
-            String lastIPv6Interface = sharedPref.getString("lastIPv6Interface", "");
-
-            ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-            String ifname = connectivityManager.getLinkProperties(network).getInterfaceName();
-
-            if ((upstreamInterface.equals("Auto") && !lastIPv6Interface.equals(pickInterface(upstreamInterface)))
-                    || ifname.equals(lastIPv6Interface)) {
-                Log.i("USBTether", "Tethered network " + lastIPv6Interface + " changed...");
-                if (natApplied) {
-                    needsReset = true;
-                }
-
-                boolean hasCallback = HandlerCompat.hasCallbacks(handler, delayedRestore);
-                if (watchdogActive && hasCallback) {
-                    Log.i("USBTether", "Clearing watchdog after network change");
-                    handler.removeCallbacks(delayedRestore);
-                    watchdogActive = false;
-                    hasCallback = false;
-                }
-                if (!hasCallback) {
-                    Log.i("USBTether", "Network change, creating callback to restore tether in 5 seconds...");
-                    handler.postDelayed(delayedRestore, 5000);
-                    notification.setContentTitle("Service is running, restoring after network change");
-                    NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                    mNotificationManager.notify(1, notification.build());
-                }
-            }
-        }*/
-
         @Override
-        public void onLost(Network network) {
+        public void onLost(@NonNull Network network) {
             super.onLost(network);
 
-            if (Script.isUSBConfigured()) {
+            Log.i("USBTether", "Received a ConnectivityManager onLost event");
+            if (watchdogActive) {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
                 String lastIPv6Interface = sharedPref.getString("lastIPv6Interface", "");
                 int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
+
+                assert upstreamInterface != null;
+                assert lastIPv6Interface != null;
 
                 // network objects are kind of useless here unless we save the handle/hashcode
-                boolean isUp = false;
-                try {
-                    NetworkInterface iface = NetworkInterface.getByName(lastIPv6Interface);
-                    if (iface != null && iface.isUp()) {
-                        isUp = true;
+                boolean setCallback = false;
+                if (cellularWatchdog && isCellularActive() == null) {
+                    setCallback = true;
+                } else if (upstreamInterface.equals("Auto") || autostartVPN > 0) {
+                    String currentIPv6Interface = pickInterface(upstreamInterface, autostartVPN);
+                    boolean isUp = false;
+                    try {
+                        NetworkInterface iface = NetworkInterface.getByName(lastIPv6Interface);
+                        if (iface != null && iface.isUp()) {
+                            isUp = true;
+                        }
+                    } catch (Exception ignored) {
                     }
-                } catch (Exception ignored) {
+                    if (!isUp || (currentIPv6Interface != null && !currentIPv6Interface.equals(lastIPv6Interface))) {
+                        setCallback = true;
+                    }
                 }
-                if (!isUp) {
-                    if (upstreamInterface.equals("Auto") || autostartVPN > 0) {
-                        boolean hasCallback = HandlerCompat.hasCallbacks(handler, delayedRestore);
-                        if (watchdogActive && hasCallback) {
-                            Log.i("USBTether", "Clearing watchdog after network change");
-                            handler.removeCallbacks(delayedRestore);
-                            watchdogActive = false;
-                            hasCallback = false;
-                        }
-                        if (!hasCallback) {
-                            Log.i("USBTether", "Network lost, creating callback to restore tether in 5 seconds...");
-                            handler.postDelayed(delayedRestore, 5000);
-                            notification.setContentTitle("Service is running, restoring after network lost");
-                            NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                            mNotificationManager.notify(1, notification.build());
-                        }
+
+                if (setCallback) {
+                    if (HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+                        Log.i("USBTether", "Clearing watchdog after network change");
+                        handler.removeCallbacks(delayedRestore);
+                        watchdogActive = false;
                     }
+                    Log.i("USBTether", "Network lost, creating callback to restore tether in 5 seconds...");
+                    handler.postDelayed(delayedRestore, 5000);
+                    networkStatus = "Restoring after lost network";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                    NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                    mNotificationManager.notify(1, notification.build());
                 }
             }
         }
 
         @Override
-        public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
+        public void onLinkPropertiesChanged(@NonNull Network network, @NonNull LinkProperties linkProperties) {
             super.onLinkPropertiesChanged(network, linkProperties);
 
-            if (Script.isUSBConfigured()) {
+            Log.i("USBTether", "Received a ConnectivityManager onLinkPropertiesChanged event");
+            if (watchdogActive) {
                 // TODO: update SNAT if onAvailable is not triggered?
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
                 String lastIPv6Interface = sharedPref.getString("lastIPv6Interface", "");
-                if ((upstreamInterface.equals("Auto") && !lastIPv6Interface.equals(pickInterface(upstreamInterface)))
-                        || linkProperties.getInterfaceName().equals(lastIPv6Interface)) {
-                    if (natApplied) {
-                        Log.i("USBTether", "Tethered network " + lastIPv6Interface + " changed...");
-                        needsReset = true;
-                    }
+                int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+                boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
-                    boolean hasCallback = HandlerCompat.hasCallbacks(handler, delayedRestore);
-                    if (watchdogActive && hasCallback) {
+                assert upstreamInterface != null;
+                assert lastIPv6Interface != null;
+
+                boolean setCallback = false;
+                if (cellularWatchdog && isCellularActive() == null) {
+                    setCallback = true;
+                }
+                // Check separately so needsReset can be set...
+                if ((upstreamInterface.equals("Auto") && !lastIPv6Interface.equals(pickInterface(upstreamInterface, autostartVPN)))
+                        || lastIPv6Interface.equals(linkProperties.getInterfaceName())) {
+                    Log.i("USBTether", "Tethered network " + lastIPv6Interface + " changed...");
+                    needsReset = true;
+                    setCallback = true;
+                }
+
+                if (setCallback) {
+                    if (HandlerCompat.hasCallbacks(handler, delayedRestore)) {
                         Log.i("USBTether", "Clearing watchdog after network change");
                         handler.removeCallbacks(delayedRestore);
                         watchdogActive = false;
-                        hasCallback = false;
                     }
-                    if (!hasCallback) {
-                        Log.i("USBTether", "Network change, creating callback to restore tether in 5 seconds...");
-                        handler.postDelayed(delayedRestore, 5000);
-                        notification.setContentTitle("Service is running, restoring after network change");
-                        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                        mNotificationManager.notify(1, notification.build());
-                    }
+                    Log.i("USBTether", "Network change, creating callback to restore tether in 5 seconds...");
+                    handler.postDelayed(delayedRestore, 5000);
+                    networkStatus = "Restoring after network change";
+                    notification.setContentTitle(networkStatus + ", " + usbStatus);
+                    NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                    mNotificationManager.notify(1, notification.build());
                 }
             }
         }
@@ -641,8 +585,9 @@ public class ForegroundService extends Service {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
-        int usbMode = sharedPref.getInt("usbMode", 0);
-        boolean preferNCM = sharedPref.getBoolean("preferNCM", false);
+
+        assert ipv6TYPE != null;
+
         SharedPreferences.Editor edit = sharedPref.edit();
         if (fixTTL && !hasTTL) {
             edit.putBoolean("fixTTL", false);
@@ -651,18 +596,6 @@ public class ForegroundService extends Service {
             edit.putString("ipv6TYPE", "None");
         }
         edit.apply();
-
-        String[] vars = Script.gadgetVars();
-
-        gadgetPath = vars[0];
-        configPath = vars[1];
-        rndisPath = vars[2];
-        ncmPath = vars[3];
-
-        Log.i("usbtether", "gadgetPath: " + gadgetPath);
-        Log.i("usbtether", "configPath: " + configPath);
-        Log.i("usbtether", "rndisPath: " + rndisPath);
-        Log.i("usbtether", "ncmPath: " + ncmPath);
 
         powerManager = (PowerManager) getSystemService(POWER_SERVICE);
         if (powerManager != null) {
@@ -681,10 +614,14 @@ public class ForegroundService extends Service {
 
         Toast.makeText(this, "Service started by user.", Toast.LENGTH_LONG).show();
 
-        notification.setContentTitle("Service is running, USB disconnected");
+        notification.setContentTitle(networkStatus + ", " + usbStatus);
         startForeground(1, notification.build());
 
-        usbInterface = Script.configureRNDIS(usbMode, preferNCM, gadgetPath, configPath, rndisPath, ncmPath);
+        usbInterface = Script.configureRNDIS(getApplicationInfo().nativeLibraryDir);
+        Script.createBridge(tetherInterface);
+        if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
+            handler.postDelayed(delayedRestore, 5000);
+        }
 
         registerReceiver(USBReceiver, new IntentFilter("android.hardware.usb.action.USB_STATE"));
 
@@ -697,11 +634,12 @@ public class ForegroundService extends Service {
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         connectivityManager.registerNetworkCallback(networkRequest, NETReceiver);
 
+        // Some devices don't broadcast after USBReceiver is registered
         if (Script.isUSBConfigured()) {
+            Script.bindBridge(tetherInterface, usbInterface);
             NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            Log.i("USBTether", "Configuring interface, creating callback to restore tether in 5 seconds...");
-            handler.postDelayed(delayedRestore, 5000);
-            notification.setContentTitle("Service is running, configuring interface");
+            usbStatus = "USB connected";
+            notification.setContentTitle(networkStatus + ", " + usbStatus);
             mNotificationManager.notify(1, notification.build());
         }
 
@@ -731,19 +669,25 @@ public class ForegroundService extends Service {
         String lastIPv6Interface = sharedPref.getString("lastIPv6Interface", "");
         String lastIPv6 = sharedPref.getString("lastIPv6", "");
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
-        Boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
+        boolean fixTTL = sharedPref.getBoolean("fixTTL", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
         boolean dmz = sharedPref.getBoolean("dmz", false);
-        Boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
+        boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
         String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
-        int usbMode = sharedPref.getInt("usbMode", 0);
+
+        assert lastIPv4Interface != null;
+        assert lastIPv6Interface != null;
+        assert lastIPv6 != null;
+        assert ipv6TYPE != null;
+        assert ipv4Addr != null;
+        assert clientBandwidth != null;
 
         if (!lastIPv6Interface.equals("")) {
-            // Stop bound services
-            Script.unconfigureTether(usbInterface, lastIPv4Interface, lastIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
-            Script.unconfigureRNDIS(usbMode, gadgetPath, configPath, rndisPath, ncmPath);
+            Script.unconfigureTether(tetherInterface, lastIPv4Interface, lastIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, lastIPv6, fixTTL, dnsmasq, getFilesDir().getPath(), clientBandwidth, dpiCircumvention, dmz);
+            Script.unconfigureRNDIS(getApplicationInfo().nativeLibraryDir);
+            Script.destroyBridge(tetherInterface);
         }
 
         natApplied = false;

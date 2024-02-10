@@ -36,13 +36,25 @@ public class Script {
         }
         return result.isSuccess();
     }
+    
+    static String testWait() {
+        String cmd = "";
+        if (shellCommand("iptables -w 0 --help > /dev/null")) {
+            cmd = "-w 2 ";
+        } else if (shellCommand("iptables -w --help > /dev/null")) { // Early versions do not have the timeout
+            cmd = "-w ";
+        }
+        return cmd;
+    }
+    
+    static String hasWait = testWait();
+    static boolean hasMASQUERADE = shellCommand("ip6tables " + hasWait + "-j MASQUERADE --help | grep \"MASQUERADE\" > /dev/null");
+    static boolean hasSNAT = shellCommand("ip6tables " + hasWait + "-j SNAT --help | grep \"SNAT\" > /dev/null");
+    static boolean hasTPROXY = shellCommand("ip6tables " + hasWait + "-j TPROXY --help | grep \"TPROXY\" > /dev/null");
+    static boolean hasTTL = shellCommand("iptables " + hasWait + "-j TTL --help | grep \"TTL\" > /dev/null");
+    static boolean hasTable = shellCommand("ip6tables " + hasWait + "--table nat --list > /dev/null");
 
-    static boolean hasWait = shellCommand("iptables -w --help");
-    static boolean hasMASQUERADE = shellCommand("ip6tables " + (hasWait ? "-w 2 " : "") + "-j MASQUERADE --help | grep \"MASQUERADE\"");
-    static boolean hasSNAT = shellCommand("ip6tables " + (hasWait ? "-w 2 " : "") + "-j SNAT --help | grep \"SNAT\"");
-    static boolean hasTPROXY = shellCommand("ip6tables " + (hasWait ? "-w 2 " : "") + "-j TPROXY --help | grep \"TPROXY\"");
-    static boolean hasTTL = shellCommand("iptables " + (hasWait ? "-w 2 " : "") + "-j TTL --help | grep \"TTL\"");
-    static boolean hasTable = shellCommand("ip6tables " + (hasWait ? "-w 2 " : "") + "--table nat --list");
+    static boolean hasCURL = shellCommand("command -v curl > /dev/null");
 
     static boolean isUSBConfigured() {
         return Shell.cmd("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
@@ -55,159 +67,126 @@ public class Script {
     }
 
     static void addIPT(String table, String operation, String rule) {
-        if (!Shell.cmd("iptables -t " + table + " -C " + rule).exec().isSuccess()) {
-            shellCommand("iptables " + (hasWait ? "-w 2 " : "") + "-t " + table + " -" + operation + " " + rule);
+        if (!Shell.cmd("iptables " + hasWait + "-t " + table + " -C " + rule).exec().isSuccess()) {
+            shellCommand("iptables " + hasWait + "-t " + table + " -" + operation + " " + rule);
         }
     }
 
     static void addIP6T(String table, String operation, String rule) {
-        if (!Shell.cmd("ip6tables -t " + table + " -C " + rule).exec().isSuccess()) {
-            shellCommand("ip6tables " + (hasWait ? "-w 2 " : "") + "-t " + table + " -" + operation + " " + rule);
+        if (!Shell.cmd("ip6tables " + hasWait + "-t " + table + " -C " + rule).exec().isSuccess()) {
+            shellCommand("ip6tables " + hasWait + "-t " + table + " -" + operation + " " + rule);
         }
     }
 
-    ///config/usb_gadget/g1/configs/b.1/f1 # cat ifname
-    //ncm0 up
-    static String[] gadgetVars() {
-        String[] result = new String[]{ null, null, null, null };
-        Shell.Result command = Shell.cmd("find /config/usb_gadget/* -maxdepth 0 -type d").exec();
-        if ( command.isSuccess() ) {
-            for (String result1 : command.getOut()) {
-                result[0] = result1;
-                if (Shell.cmd("[ \"$(cat " + result[0] + "/UDC )\" = \"$(getprop sys.usb.controller)\" ]").exec().isSuccess()) {
-                    Shell.Result command2 = Shell.cmd("find " + result[0] + "/configs/* -maxdepth 0 -type d").exec();
-                    if ( command2.isSuccess() ) {
-                        for (String result2 : command2.getOut()) {
-                            result[1] = result2;
-                            break;
-                        }
-                    }
-                    // RNDIS
-                    command2 = Shell.cmd("find " + result[0] + "/functions/rndis.* -maxdepth 0 -type d").exec();
-                    if ( command2.isSuccess() ) {
-                        for (String result2 : command2.getOut()) {
-                            if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
-                                result[2] = result2;
-                                break;
-                            }
-                        }
-                    }
-                    if (result[2] == null) {
-                        command2 = Shell.cmd("find " + result[0] + "/functions/*.rndis -maxdepth 0 -type d").exec();
-                        if (command2.isSuccess()) {
-                            for (String result2 : command2.getOut()) {
-                                if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
-                                    result[2] = result2;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    // NCM
-                    command2 = Shell.cmd("find " + result[0] + "/functions/ncm.* -maxdepth 0 -type d").exec();
-                    if ( command2.isSuccess() ) {
-                        for (String result2 : command2.getOut()) {
-                            if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
-                                result[3] = result2;
-                                break;
-                            }
-                        }
-                    }
-                    if (result[3] == null) {
-                        command2 = Shell.cmd("find " + result[0] + "/functions/*.ncm -maxdepth 0 -type d").exec();
-                        if (command2.isSuccess()) {
-                            for (String result2 : command2.getOut()) {
-                                if (Shell.cmd("ls -A " + result2).exec().isSuccess()) {
-                                    result[3] = result2;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (result[0] != null && result[1] != null && (result[2] != null || result[3] != null)) {
-                        break;
-                    }
+    static void createBridge(String tetherInterface) {
+        shellCommand("ip link add name " + tetherInterface + " type bridge");
+        shellCommand("ip link set " + tetherInterface + " up");
+    }
+
+    static void bindBridge(String tetherInterface, String usbInterface) {
+        if (shellCommand("ip link set " + usbInterface + " up")) {
+            shellCommand("ip link set " + usbInterface + " master " + tetherInterface);
+        }
+    }
+
+    static void destroyBridge(String tetherInterface) {
+        shellCommand("ip link delete " + tetherInterface + " type bridge");
+    }
+
+    static boolean[] getTetherConfig() {
+        boolean adbEnabled = false;
+        if (Shell.cmd("getprop persist.sys.usb.config").exec().getOut().get(0).contains("adb")) {
+            adbEnabled = true;
+        }
+
+        boolean useService = false;
+        if (Build.VERSION.SDK_INT >= 34 && !shellCommand("service check android.hardware.usb.gadget.IUsbGadget/default | grep \"not found\" > /dev/null")) {
+            useService = true;
+        }
+
+        // sys.config.state is left undefined with GadgetHal impl
+        boolean useGadget = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !shellCommand("getprop | grep sys.usb.state > /dev/null")) {
+            useGadget = true;
+        }
+
+        // getGadgetHalVersion was added to svc in Android 12
+        // Need to use root service with reflection to properly support Android 11
+        boolean hasNCM = false;
+        if (useGadget && Build.VERSION.SDK_INT >= 31) {
+            Shell.Result shell = Shell.cmd("svc usb getGadgetHalVersion").exec();
+            if (shell.isSuccess()) {
+                String version = shell.getOut().get(0);
+                if (version.equals("unknown")) {
+                    useGadget = false;
+                } else if (!(version.equals("V1_0") || version.equals("V1_1"))) {
+                    hasNCM = true;
                 }
-                result = new String[]{null, null, null, null};
             }
         }
-        return result;
+
+        return new boolean[] { adbEnabled, useService, useGadget, hasNCM };
     }
 
-    static String configureRNDIS(int usbMode, boolean preferNCM, String gadgetPath, String configPath, String rndisPath, String ncmPath) {
-        String functionName = "rndis";
-        String functionPath = rndisPath;
-        if (usbMode == 0 && (configPath == null || (rndisPath == null && ncmPath == null))) {
-            usbMode = 1;
-        }
+    static String configureRNDIS(String libDIR) {
 
-        if (usbMode == 1) {
-            Log.i("USBTether", "Configuring USB state via legacy setprop");
-            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+        boolean[] config = getTetherConfig();
+        boolean adbEnabled = config[0];
+        boolean useService = config[1];
+        boolean useGadget = config[2];
+        boolean hasNCM = config[3];
+
+        int NONE = 0;
+        int ADB = 1 << 0;
+        int RNDIS = 1 << 5;
+        int NCM = 1 << 10;
+        String gagdetFunctions = Integer.toString((adbEnabled ? ADB : NONE) + (hasNCM ? NCM : RNDIS));
+
+        String functionName = hasNCM ? "ncm" : "rndis";
+        if (useService) {
+            // This is untested, who knows if it works as expected
+            Log.i("USBTether", "Configuring " + functionName + " via IUsbGadget");
+            shellCommand("service call android.hardware.usb.gadget.IUsbGadget/default 1 i64 " + gagdetFunctions + " null i64 0 i64 1");
+        } else if (useGadget) {
+            Log.i("USBTether", "Configuring " + functionName + " via GadgetHal");
+            shellCommand(libDIR + "/libusbgadget.so " + gagdetFunctions);
+        } else {
+            // LegacyHal can impl ncm, but we have no way to check
+            Log.i("USBTether", "Configuring " + functionName + " via LegacyHal");
+            if (adbEnabled) {
                 shellCommand("setprop sys.usb.config rndis,adb");
             } else {
                 shellCommand("setprop sys.usb.config rndis");
             }
-        } else if (usbMode == 2) {
-            Log.i("USBTether", "Configuring USB state via svc");
-            if (preferNCM) {
-                functionName = "ncm";
-            }
-            String postfix = "";
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                postfix = "s";
-            }
-            if (!Shell.cmd("svc usb getFunction" + postfix).exec().getOut().get(0).contains(functionName)) {
-                shellCommand("svc usb setFunction" + postfix + " " + functionName);
-            }
-        } else {
-            Log.i("USBTether", "Configuring USB state via usbgadget");
-            if ((preferNCM && ncmPath != null) || rndisPath == null) {
-                functionName = "ncm";
-                functionPath = ncmPath;
-            }
-            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("echo \"" + functionName + "_adb\" > " + configPath + "/strings/0x409/configuration");
-            } else {
-                shellCommand("echo \"" + functionName + "\" > " + configPath + "/strings/0x409/configuration");
-            }
-            shellCommand("ln -s " + functionPath + " " + configPath + "/usbtether");
-            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
         shellCommand("n=0; while [[ $n -lt 10 ]]; do if [[ -d /sys/class/net/" + functionName + "0 ]]; then break; fi; n=$((n+1)); echo \"waiting for usb... $n\"; sleep 1; done");
+
         return functionName + "0";
     }
 
-    static void unconfigureRNDIS(int usbMode, String gadgetPath, String configPath, String rndisPath, String ncmPath) {
-        if (usbMode == 0 && (configPath == null || (rndisPath == null && ncmPath == null))) {
-            usbMode = 1;
-        }
+    static void unconfigureRNDIS(String libDIR) {
+        boolean[] config = getTetherConfig();
+        boolean adbEnabled = config[0];
+        boolean useService = config[1];
+        boolean useGadget = config[2];
 
-        if (usbMode == 1) {
-            Log.i("USBTether", "Unconfiguring rndis state via legacy setprop");
-            if (Shell.cmd("[ \"$(getprop sys.usb.state)\" = *\"adb\"* ]").exec().isSuccess()) {
+        int NONE = 0;
+        int ADB = 1 << 0;
+        String gagdetFunctions = Integer.toString(adbEnabled ? ADB : NONE);
+
+        if (useService) {
+            Log.i("USBTether", "Unconfiguring USB state via IUsbGadget");
+            shellCommand("service call android.hardware.usb.gadget.IUsbGadget/default 1 i64 " + gagdetFunctions + " null i64 0 i64 1");
+        } else if (useGadget) {
+            Log.i("USBTether", "Unconfiguring USB state via GadgetHal");
+            shellCommand(libDIR + "/libusbgadget.so " + gagdetFunctions);
+        } else {
+            Log.i("USBTether", "Unconfiguring USB state via LegacyHal");
+            if (adbEnabled) {
                 shellCommand("setprop sys.usb.config adb");
             } else {
                 shellCommand("setprop sys.usb.config none");
             }
-        } else if (usbMode == 2) {
-            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
-            String postfix = "";
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                postfix = "s";
-            }
-            shellCommand("svc usb setFunction" + postfix);
-        } else {
-            Log.i("USBTether", "Unconfiguring rndis state via usbgadget");
-            shellCommand("echo \"none\" > " + gadgetPath + "/UDC");
-            if (Shell.cmd("[ \"$(cat " + configPath + "/strings/0x409/configuration)\" = *\"adb\"* ]").exec().isSuccess()) {
-                shellCommand("echo \"adb\" > " + configPath + "/strings/0x409/configuration");
-            } else {
-                shellCommand("echo \"none\" > " + configPath + "/strings/0x409/configuration");
-            }
-            shellCommand("unlink " + configPath + "/usbtether");
-            shellCommand("getprop sys.usb.controller > " + gadgetPath + "/UDC");
         }
     }
 
@@ -260,11 +239,7 @@ public class Script {
         shellCommand("ip -6 route flush dev " + tetherInterface);
     }
 
-    static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, int usbMode) {
-        if (usbMode == 2) {
-            // svc may configure interface, so clear it first
-            unconfigureInterface(tetherInterface);
-        }
+    static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Configuring interface");
         return shellCommand("ip link set dev " + tetherInterface + " down")
                 && configureAddresses(tetherInterface, ipv4Addr, ipv6Prefix)
@@ -453,10 +428,10 @@ public class Script {
         }
     }
 
-    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, Boolean fixTTL, Boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz, int usbMode) {
+    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean fixTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
         // Check that tetherInterface is actually available to avoid wasting time
-        if (shellCommand("ip link set dev " + tetherInterface + " down")
-                && configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, usbMode)) {
+        if (/*shellCommand("ip link set dev " + tetherInterface + " down")
+                &&*/ configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
             shellCommand("echo 1 > /proc/sys/net/ipv6/conf/all/forwarding");
@@ -476,26 +451,30 @@ public class Script {
             }
             //--dhcp-host=46:65:23:9e:c0:c6,192.168.1.2 --dhcp-host=46:65:23:9e:c0:c6,[2001:db8::2]
             if (dnsmasq) {
+                // DNSMasq as a bug with --port when an interface is lost and restored
+                // it will lose it's UDP binding and will never restore it
                 addIPT("nat", "I", "PREROUTING -i " + tetherInterface + " -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
                 addIPT("nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
+                addIPT("nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p tcp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
                     addIP6T("nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
                 }
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --listen-address=192.168.1.129 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    //shellCommand(libDIR + "/libdnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
             if (ipv6TYPE.equals("TPROXY")) {
                 shellCommand("rm " + appData + "/socks.pid");
                 shellCommand("rm " + appData + "/tproxy.pid");
-                shellCommand(libDIR + "/hevserver.so " + appData + "/socks.yml &");
-                shellCommand(libDIR + "/hevtproxy.so " + appData + "/tproxy.yml &");
+                shellCommand(libDIR + "/libhevserver.so " + appData + "/socks.yml &");
+                shellCommand(libDIR + "/libhevtproxy.so " + appData + "/tproxy.yml &");
             }
             if (dpiCircumvention) {
                 addIPT("nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
@@ -510,6 +489,9 @@ public class Script {
                     shellCommand("ip -6 rule add pref 520 fwmark 8123 table 998");
                     shellCommand("ip -6 route add local default dev lo table 998");
                 }
+                shellCommand("rm " + appData + "/tpws.pid");
+                //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
+                shellCommand(libDIR + "/libtpws.so --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
             }
             if (dmz) {
                 configureDMZ(ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE);
@@ -521,10 +503,11 @@ public class Script {
         return true;
     }
 
-    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, Boolean fixTTL, Boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
+    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean fixTTL, boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention, boolean dmz) {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         if (dnsmasq) {
             killProcess(appData + "/dnsmasq.pid");
+            shellCommand("iptables -t nat -D PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p tcp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
             shellCommand("iptables -t nat -D PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
             shellCommand("iptables -t nat -D PREROUTING -i " + tetherInterface + " -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
             if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
@@ -565,18 +548,7 @@ public class Script {
         shellCommand("echo 0 > /proc/sys/net/ipv6/conf/all/forwarding");
     }
 
-    static void startTPWS(String ipv4Addr, String ipv6Prefix, String libDIR, String appData) {
-        killProcess(appData + "/tpws.pid");
-        shellCommand("rm " + appData + "/tpws.pid");
-        //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
-        shellCommand(libDIR + "/tpws.so --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
-    }
-
-    static void stopTPWS(String appData) {
-        killProcess(appData + "/tpws.pid");
-    }
-
-    static void checkProcesses(String ipv4Addr, String ipv6Prefix, String ipv6TYPE, Boolean dnsmasq, String libDIR, String appData, boolean dpiCircumvention) {
+    static void checkProcesses(String ipv4Addr, String ipv6Prefix, String ipv6TYPE, boolean dnsmasq, boolean dpiCircumvention, String libDIR, String appData) {
         if (dnsmasq) {
             if (!shellCommand("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]")) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
@@ -584,30 +556,33 @@ public class Script {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --listen-address=192.168.1.129 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    //shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/dnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --listen-mark 0xf0063 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
         }
         if (dpiCircumvention) {
             if (!shellCommand("[ -f " + appData + "/tpws.pid -a -d /proc/$(cat " + appData + "/tpws.pid) ]")) {
                 Log.w("USBTether", "No tpws process, restarting");
-                startTPWS(ipv4Addr, ipv6Prefix, libDIR, appData);
+                shellCommand("rm " + appData + "/tpws.pid");
+                //shellCommand(appData + "/tpws." + Build.SUPPORTED_ABIS[0] + " --bind-iface4=rndis0 --bind-iface6=rndis0 --port=8123 --split-pos=3 --uid 1:3003 &");
+                shellCommand(libDIR + "/libtpws.so --bind-addr=" + ipv4Addr + " --bind-addr=" + ipv6Prefix + "1 --port=8123 --pidfile=" + appData + "/tpws.pid --split-pos=3 --uid 1:3003 &");
             }
         }
         if (ipv6TYPE.equals("TPROXY")) {
             if (!shellCommand("[ -f " + appData + "/socks.pid -a -d /proc/$(cat " + appData + "/socks.pid) ]")) {
                 Log.w("USBTether", "No socks process, restarting");
                 shellCommand("rm " + appData + "/socks.pid");
-                shellCommand(appData + "/hevserver." + Build.SUPPORTED_ABIS[0] + " " + appData + "/socks.yml &");
+                shellCommand(libDIR + "/libhevserver.so " + appData + "/socks.yml &");
             }
             if (!shellCommand("[ -f " + appData + "/tproxy.pid -a -d /proc/$(cat " + appData + "/tproxy.pid) ]")) {
                 Log.w("USBTether", "No tproxy process, restarting");
                 shellCommand("rm " + appData + "/tproxy.pid");
-                shellCommand(appData + "/hevtproxy." + Build.SUPPORTED_ABIS[0] + " " + appData + "/tproxy.yml &");
+                shellCommand(libDIR + "/libhevtproxy.so " + appData + "/tproxy.yml &");
             }
         }
     }
@@ -623,23 +598,25 @@ public class Script {
         addIP6T("nat", "A", prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
     }
 
-    static Boolean testConnection(String upstreamInterface) {
-        if (Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 1.1.1.1").exec().isSuccess()
-                || Shell.cmd("ping -c 1 -w 3 -I " + upstreamInterface + " 8.8.8.8").exec().isSuccess()) {
-            Log.i("USBTether", upstreamInterface + " IPv4 is online");
-            return true;
+    static boolean testConnection(String upstreamInterface, boolean isIPv6) {
+        String protocol = isIPv6 ? "IPv6" : "IPv4";
+        if (hasCURL) {
+            String testSite = "http://connectivitycheck.gstatic.com/generate_204";
+            String argument = isIPv6 ? "--ipv6" : "--ipv4";
+            if (Shell.cmd("curl " + argument + " --interface " + upstreamInterface + " --retry 2 --retry-max-time 5 " + testSite).exec().isSuccess()) {
+                Log.i("USBTether", upstreamInterface + " " + protocol + " is online");
+                return true;
+            }
+        } else {
+            String testSite = "connectivitycheck.gstatic.com";
+            String command = isIPv6 ? "ping6" : "ping";
+            if (Shell.cmd(command + " -c 1 -w 3 -I " + upstreamInterface + " " + testSite).exec().isSuccess()
+                    || Shell.cmd(command + " -c 1 -w 3 -I " + upstreamInterface + " " + testSite).exec().isSuccess()) {
+                Log.i("USBTether", upstreamInterface + " " + protocol + " is online");
+                return true;
+            }
         }
-        Log.w("USBTether", upstreamInterface + " IPv4 is offline");
-        return false;
-    }
-
-    static Boolean testConnection6(String upstreamInterface) {
-        if (Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2606:4700:4700::1111").exec().isSuccess()
-                || Shell.cmd("ping6 -c 1 -w 3 -I " + upstreamInterface + " 2001:4860:4860::8888").exec().isSuccess()) {
-            Log.i("USBTether", upstreamInterface + " IPv6 is online");
-            return true;
-        }
-        Log.w("USBTether", upstreamInterface + " IPv6 is offline");
+        Log.w("USBTether", upstreamInterface + " " + protocol + " is offline");
         return false;
     }
 
