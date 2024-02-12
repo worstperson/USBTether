@@ -150,6 +150,7 @@ public class Script {
         } else {
             // LegacyHal can impl ncm, but we have no way to check
             Log.i("USBTether", "Configuring " + functionName + " via LegacyHal");
+            shellCommand("setprop sys.usb.config none");
             if (adbEnabled) {
                 shellCommand("setprop sys.usb.config rndis,adb");
             } else {
@@ -172,17 +173,17 @@ public class Script {
         String gagdetFunctions = Integer.toString(adbEnabled ? ADB : NONE);
 
         if (useService) {
-            Log.i("USBTether", "Unconfiguring USB state via IUsbGadget");
+            Log.i("USBTether", "Configuring default USB state via IUsbGadget");
             shellCommand("service call android.hardware.usb.gadget.IUsbGadget/default 1 i64 " + gagdetFunctions + " null i64 0 i64 1");
         } else if (useGadget) {
-            Log.i("USBTether", "Unconfiguring USB state via GadgetHal");
+            Log.i("USBTether", "Configuring default USB state via GadgetHal");
             shellCommand(libDIR + "/libusbgadget.so " + gagdetFunctions);
         } else {
-            Log.i("USBTether", "Unconfiguring USB state via LegacyHal");
+            Log.i("USBTether", "Configuring default USB state via LegacyHal");
+            // Some broken HAL impls need none to be set or the gadget will not reset
+            shellCommand("setprop sys.usb.config none");
             if (adbEnabled) {
                 shellCommand("setprop sys.usb.config adb");
-            } else {
-                shellCommand("setprop sys.usb.config none");
             }
         }
     }
