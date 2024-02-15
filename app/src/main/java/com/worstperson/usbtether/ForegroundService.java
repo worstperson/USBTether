@@ -236,22 +236,21 @@ public class ForegroundService extends Service {
         String currentIPv4Interface = currentIPv6Interface;
 
         Log.i("USBTether", "Checking connection availability...");
-        String cellularIPv6 = null;
         boolean cellularUP = true;
-        if (cellularWatchdog) {
-            cellularIPv6 = isCellularActive();
-            if (cellularIPv6 != null) {
-                String cellularIPv4 = hasXlat(cellularIPv6);
-                if (currentIPv6Interface == null || !currentIPv6Interface.equals(cellularIPv6)) {
+        String cellularIPv6 = isCellularActive();
+        if (cellularIPv6 != null) {
+            String cellularIPv4 = hasXlat(cellularIPv6);
+            if (currentIPv6Interface == null || !currentIPv6Interface.equals(cellularIPv6)) {
+                if (cellularWatchdog) {
                     // Only check that any protocol is working, it's not the tethered network so we don't care if just one goes down
                     // Keeps from having to pull APN configs, check for plat servers, and get caught in loops during partial outages
                     cellularUP = Script.testConnection(cellularIPv4, false) || Script.testConnection(cellularIPv6, true);
-                } else {
-                    currentIPv4Interface = cellularIPv4;
                 }
             } else {
-                cellularUP = false;
+                currentIPv4Interface = cellularIPv4;
             }
+        } else if (cellularWatchdog) {
+            cellularUP = false;
         }
         if (cellularUP) {
             if (currentIPv6Interface != null && Script.testConnection(currentIPv4Interface, false) && ((!ipv6TYPE.equals("MASQUERADE") && !ipv6TYPE.equals("SNAT")) || Script.testConnection(currentIPv6Interface, true))) {
