@@ -55,7 +55,6 @@ struct nfnl_handle {
 	struct nfnl_subsys_handle subsys[NFNL_MAX_SUBSYS+1];
 };
 
-
 struct globalArgs_t {
 	uint16_t ttl; /* Time to live */
 	uint16_t numq; /* number queue */
@@ -141,13 +140,11 @@ void daemonize() {
 	/* stderror */
 }
 
-
 void display_usage( void ) {
 	puts( "Usage:\n -d --daemon;\tdo not demonize\n -n --num-queue=1-65535;\tnum queue, default 6464\n -t --ttl=1-255;\tset time to live, default 64\n -p --pid-file=<path>;\tcreate pid file\n -h --help;\tprint help\n" );
 
 	exit( EXIT_FAILURE );
 }
-
 
 int main(int argc, char **argv) {
 	struct nfq_handle *h;
@@ -174,7 +171,7 @@ int main(int argc, char **argv) {
 				opta = atoi(optarg);
 				if (opta > 0 && opta <= 255) {
 					globalArgs.ttl = opta;
-						break;
+					break;
 				} else {
 					printf("Wrong ttl value: %d\n", opta);
 					display_usage();
@@ -183,19 +180,19 @@ int main(int argc, char **argv) {
 				opta = atoi(optarg);
 				if(opta > 0 && opta <= 65535) {
 					globalArgs.numq = opta;
-						break;
+					break;
 				} else {
 					printf("Wrong number queue value: %d\n", opta);
 					display_usage();
 				}
 			case 'd':
 					globalArgs.daemon = 0;
-						break;
+					break;
 			case 'l':
 				opta = atoi(optarg);
 				if (opta > 0 && opta <= 4294967295) {
 					globalArgs.sizepacket = opta;
-						break;
+					break;
 				} else {
 					printf("Wrong size limit value: %d\n", opta);
 					display_usage();
@@ -218,7 +215,6 @@ int main(int argc, char **argv) {
 		}
 		opt = getopt_long( argc, argv, optString, longOpts, &option_index );
 	}
-
 
 	printf("opening library handle\n");
 	h = nfq_open();
