@@ -24,6 +24,10 @@ Some features require your kernel to be compiled with specific options to be usa
 
 - CONFIG_NETFILTER_XT_TARGET_HL - modify TTL and HL hoplimit
 
+#### For Modify TTL/HL via NFQUEUE:
+
+- CONFIG_NETFILTER_XT_TARGET_NFQUEUE
+
 #### For IPv6 TPROXY:
 
 - NETFILTER_XT_TARGET_TPROXY - tproxy target support
@@ -39,6 +43,7 @@ Some features require your kernel to be compiled with specific options to be usa
 - CONFIG_IP6_NF_TARGET_MASQUERADE - IPv6 Masquerading target
 
 For kernels 5.2 and later, build this instead:
+
 - CONFIG_NETFILTER_XT_TARGET_MASQUERADE - IPv6 Masquerading target
 
 Note:If your target kernel uses CONFIG_MODULE_SIG_FORCE, learn how to disable it [here](https://forum.xda-developers.com/t/guide-kernel-mod-patching-out-config_module_sig_force-on-stock-kernels.4278981/).
@@ -59,7 +64,7 @@ There are a bunch of paid apps that tunnel data through adb, but they all have t
 
 #### What if I can't build the kernel modules mentioned?
 
-USB Tether can still be used to tether IPv4 traffic. Wifi and VPN tethers will work fine, but mobile data will be easily detectable through TTL. You use a local VPN like ADGuard, manually set the TTL on your device(s), or use this firewall rule to set the TTL/HL on the bridged traffic passing through your router:
+USB Tether can still be used to tether IPv4 traffic normally. TTL/HL modification can be applied if your device supports NFQUEUE and some IPv6 support can be enabled if your device supports TPROXY. If NFQUEUE is not available you can use a local VPN like ADGuard, manually set the TTL on your device(s), [patch your kernel/bpf modules](https://xdaforums.com/t/magisk-tethering-ttl-hl-patcher.4623067/), or use these firewall rules to set the TTL/HL on the bridged traffic passing through your router:
 
 Install required packages
 
@@ -77,6 +82,8 @@ Network -> Firewall -> Custom Rules
 
     iptables -t mangle -I POSTROUTING -m physdev --physdev-out usb0 -j TTL --ttl-set 65
     ip6tables -t mangle -I POSTROUTING -m physdev --physdev-out usb0 -m hl ! --hl-eq 255 -j HL --hl-set 65
+
+The ip6tables rule is generally not needed, but included just in case. Can be useful for normal tethering without this app.
 
 #### Why does IPv6 require NAT support?
 
@@ -182,10 +189,12 @@ And create a script as /etc/hotplug.d/usb/11-sqm
     EOF
 
 This hotplug script is required or SQM will not be applied when the device is replugged.
+Setting Download and Uploaded speed to half the link's capacity has the best results in
+managing bufferbloat on mobile networks, but ymmv.
 
 ## TODO:
 
- - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
+ - **Static Assignments** - It would be nice if we could reserve addresses for specific devices
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 
 ## DEPENDENCIES:

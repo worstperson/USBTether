@@ -229,8 +229,7 @@ public class Script {
         Log.i("USBTether", "Setting IP routes");
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         return shellCommand("ip route add " + ipv4Prefix + ".0/24 dev " + tetherInterface + " table local_network proto static scope link")
-                && shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link")
-                && shellCommand("ip -6 route add fe80::/64 dev " + tetherInterface + " table local_network proto static scope link");
+                && shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link");
     }
 
     static void unconfigureRoutes(String tetherInterface) {
@@ -389,21 +388,14 @@ public class Script {
             }
             if (dnsmasq) {
                 // DNSMasq has a bug with --port when an interface is lost and restored, it will lose it's UDP binding and will never restore it
-                iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
-                iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
-                iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p tcp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
-                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
-                    iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p tcp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
-                }
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
             if (ipv6TYPE.equals("TPROXY")) {
@@ -439,13 +431,6 @@ public class Script {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         if (dnsmasq) {
             killProcess(appData + "/dnsmasq.pid");
-            iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -s 0.0.0.0 -d 255.255.255.255 -p udp --dport 67 -j DNAT --to-destination 255.255.255.255:6767");
-            iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p udp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
-            iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -s " + ipv4Prefix + ".0/24 -d " + ipv4Addr + " -p tcp --dport 53 -j DNAT --to-destination " + ipv4Addr + ":5353");
-            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p udp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
-                iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -s " + ipv6Prefix + "/64 -d " + ipv6Prefix + "1 -p tcp --dport 53 -j DNAT --to-destination [" + ipv6Prefix + "1]:5353");
-            }
         }
         if (ipv6TYPE.equals("TPROXY")) {
             killProcess(appData + "/socks.pid");
@@ -503,11 +488,11 @@ public class Script {
                 shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
         }

@@ -199,7 +199,6 @@ public class MainActivity extends AppCompatActivity {
         TextView net_textview = findViewById(R.id.net_textview);
         Switch service_switch = findViewById(R.id.service_switch);
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
-        //Switch ttl_switch = findViewById(R.id.ttl_switch);
         Spinner ttl_spinner = findViewById(R.id.ttl_spinner);
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch cell_switch = findViewById(R.id.cell_switch);
