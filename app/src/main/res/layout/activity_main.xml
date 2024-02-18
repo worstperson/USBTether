@@ -209,11 +209,12 @@
                     android:gravity="center"
                     android:text="Modify TTL/HL:"
                     android:textAppearance="?android:attr/textAppearanceMedium" />
-                <Switch
-                    android:id="@+id/ttl_switch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="false" />
+                <Spinner
+                    android:id="@+id/ttl_spinner"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textAlignment="textEnd" />
             </LinearLayout>
 
             <LinearLayout

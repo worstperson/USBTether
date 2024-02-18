@@ -52,8 +52,10 @@ public class Script {
     static boolean hasSNAT = shellCommand("ip6tables " + hasWait + "-j SNAT --help | grep \"SNAT\" > /dev/null");
     static boolean hasTPROXY = shellCommand("ip6tables " + hasWait + "-j TPROXY --help | grep \"TPROXY\" > /dev/null");
     static boolean hasTTL = shellCommand("iptables " + hasWait + "-j TTL --help | grep \"TTL\" > /dev/null");
+    static boolean hasNFQUEUE = shellCommand("iptables " + hasWait + "-j NFQUEUE --help | grep \"NFQUEUE\" > /dev/null");
     static boolean hasTable = shellCommand("ip6tables " + hasWait + "--table nat --list > /dev/null");
 
+    // FIXME: inexplicable slowdown in cellular check after a VPN restore, does not happen with ping
     static boolean hasCURL = shellCommand("command -v curl > /dev/null");
 
     static boolean isUSBConfigured() {
@@ -353,7 +355,7 @@ public class Script {
         iptables(true, "mangle", "I", "TPROXY_ROUTE_PREROUTING -d " + prefix + "::/64 -j RETURN");
     }
 
-    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean fixTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
+    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
         if (configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
@@ -365,11 +367,18 @@ public class Script {
             } else if (ipv6TYPE.equals("TPROXY")) {
                 configureTPROXY();
             }
-            if (fixTTL) {
+            if (setTTL.equals("TTL/HL")) {
                 iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
-                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Won't work with encapsulated traffic
+                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
                     iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
+            } else if (setTTL.equals("NFQUEUE")) {
+                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6464");
+                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6464");
+                }
+                shellCommand("rm " + appData + "/nfqttl.pid");
+                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6464 --pid-file=" + appData + "/nfqttl.pid &");
             }
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per IP address
@@ -426,7 +435,7 @@ public class Script {
         return true;
     }
 
-    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean fixTTL, boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
+    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
         if (dnsmasq) {
             killProcess(appData + "/dnsmasq.pid");
@@ -463,11 +472,17 @@ public class Script {
                 iptables(true, "filter", "D", "FORWARD -i " + ipv6Interface + " -o " + tetherInterface + " -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
             }
         }
-        if (fixTTL) {
+        if (setTTL.equals("TTL/HL")) {
             iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
             if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Won't work with encapsulated traffic
                 iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
             }
+        } else if (setTTL.equals("NFQUEUE")) {
+            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6464");
+            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6464");
+            }
+            killProcess(appData + "/nfqttl.pid");
         }
         unconfigureNAT(false, tetherInterface, ipv4Interface, "", false);
         if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
@@ -480,7 +495,7 @@ public class Script {
         shellCommand("echo 0 > /proc/sys/net/ipv6/conf/all/forwarding");
     }
 
-    static void checkProcesses(String tetherInterface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE, boolean dnsmasq, boolean dpiCircumvention, String libDIR, String appData) {
+    static void checkProcesses(String tetherInterface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE, String setTTL, boolean dnsmasq, boolean dpiCircumvention, String libDIR, String appData) {
         if (dnsmasq) {
             if (!shellCommand("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]")) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
@@ -494,6 +509,13 @@ public class Script {
                 } else {
                     shellCommand(libDIR + "/libdnsmasq.so -i " + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --port=5353 --dhcp-alternate-port=6767,68 --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
                 }
+            }
+        }
+        if (setTTL.equals("NFQUEUE")) {
+            if (!shellCommand("[ -f " + appData + "/nfqttl.pid -a -d /proc/$(cat " + appData + "/nfqttl.pid) ]")) {
+                Log.w("USBTether", "No nfqttl process, restarting");
+                shellCommand("rm " + appData + "/nfqttl.pid");
+                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6464 --pid-file=" + appData + "/nfqttl.pid &");
             }
         }
         if (dpiCircumvention) {

@@ -1,0 +1,54 @@
+diff -ru org/libnetfilter_queue-1.0.5/src/extra/ipv4.c fix/libnetfilter_queue-1.0.5/src/extra/ipv4.c
+--- org/libnetfilter_queue-1.0.5/src/extra/ipv4.c	2020-06-12 04:39:24.759841569 -0500
++++ fix/libnetfilter_queue-1.0.5/src/extra/ipv4.c	2024-02-17 16:38:05.012918055 -0600
+@@ -12,7 +12,8 @@
+ #include <stdio.h>
+ #include <stdbool.h>
+ #include <arpa/inet.h>
+-#include <netinet/ip.h>
++//#include <netinet/ip.h>
++#include <linux/ip.h>
+ 
+ #include <libnetfilter_queue/libnetfilter_queue.h>
+ #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+diff -ru org/libnetfilter_queue-1.0.5/src/extra/pktbuff.c fix/libnetfilter_queue-1.0.5/src/extra/pktbuff.c
+--- org/libnetfilter_queue-1.0.5/src/extra/pktbuff.c	2020-06-12 04:39:24.759841569 -0500
++++ fix/libnetfilter_queue-1.0.5/src/extra/pktbuff.c	2024-02-17 16:30:11.282933764 -0600
+@@ -14,7 +14,8 @@
+ #include <string.h> /* for memcpy */
+ #include <stdbool.h>
+ 
+-#include <netinet/if_ether.h>
++//#include <netinet/if_ether.h>
++#include <linux/if_ether.h>
+ #include <netinet/ip.h>
+ #include <netinet/tcp.h>
+ 
+diff -ru org/libnetfilter_queue-1.0.5/src/extra/tcp.c fix/libnetfilter_queue-1.0.5/src/extra/tcp.c
+--- org/libnetfilter_queue-1.0.5/src/extra/tcp.c	2020-06-12 04:39:24.759841569 -0500
++++ fix/libnetfilter_queue-1.0.5/src/extra/tcp.c	2024-02-17 16:29:38.356268191 -0600
+@@ -139,10 +139,10 @@
+  *  (union is compatible to any of its members)
+  *  This means this part of the code is -fstrict-aliasing safe now.
+  */
+-union tcp_word_hdr {
++/*union tcp_word_hdr {
+ 	struct tcphdr hdr;
+ 	uint32_t  words[5];
+-};
++};*/
+ 
+ #define tcp_flag_word(tp) ( ((union tcp_word_hdr *)(tp))->words[3])
+ 
+diff -ru org/libnetfilter_queue-1.0.5/src/nlmsg.c fix/libnetfilter_queue-1.0.5/src/nlmsg.c
+--- org/libnetfilter_queue-1.0.5/src/nlmsg.c	2020-06-12 04:39:24.763841571 -0500
++++ fix/libnetfilter_queue-1.0.5/src/nlmsg.c	2024-02-17 16:29:05.749602598 -0600
+@@ -21,7 +21,7 @@
+ 
+ #include <linux/netfilter/nfnetlink_queue.h>
+ 
+-#include <libnetfilter_queue/libnetfilter_queue.h>
++//#include <libnetfilter_queue/libnetfilter_queue.h>
+ 
+ #include "internal.h"
+ 

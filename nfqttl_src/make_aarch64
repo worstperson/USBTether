@@ -1,0 +1,51 @@
+#!/bin/sh
+
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export HOST_TAG=linux-x86_64
+export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
+export AR=$TOOLCHAIN/bin/llvm-ar
+export AS=$TOOLCHAIN/bin/llvm-as
+export CC=$TOOLCHAIN/bin/aarch64-linux-android23-clang
+export CXX=$TOOLCHAIN/bin/aarch64-linux-android23-clang++
+export LD=$TOOLCHAIN/bin/ld
+export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+rm -R sysroot_aarch64
+
+rm -R libmnl-1.0.5
+wget -nc https://www.netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+tar -xf libmnl-1.0.5.tar.bz2
+cd libmnl-1.0.5
+./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make
+make install
+cd ..
+
+rm -R libnfnetlink-1.0.2
+wget -nc https://www.netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.2.tar.bz2
+tar -xf libnfnetlink-1.0.2.tar.bz2
+cd libnfnetlink-1.0.2
+./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make
+make install
+cd ..
+
+rm -R libnetfilter_queue-1.0.5
+wget -nc https://www.netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+tar -xf libnetfilter_queue-1.0.5.tar.bz2
+patch -p1 < libnetfilter_queue-1.0.5.patch
+cd libnetfilter_queue-1.0.5
+export CFLAGS+=' -fPIC -I../../sysroot_aarch64/include'
+export LDFLAGS+=' -fPIC'
+export PKG_CONFIG_PATH='../sysroot_aarch64/lib/pkgconfig'
+./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make
+make install
+mkdir ../sysroot_aarch64/include/src
+cp config.h ../sysroot_aarch64/include/src/
+cp src/internal.h ../sysroot_aarch64/include/src/
+cd ..
+
+$CC -I./sysroot_aarch64/include/ -L./sysroot_aarch64/lib/ -l:libmnl.a -l:libnetfilter_queue.a -l:libnfnetlink.a -o nfqttl_aarch64 nfqttl.c
+$STRIP nfqttl_aarch64
