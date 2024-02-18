@@ -37,6 +37,7 @@ Some features require your kernel to be compiled with specific options to be usa
 
 - (The options for IPv6 SNAT)
 - CONFIG_IP6_NF_TARGET_MASQUERADE - IPv6 Masquerading target
+
 For kernels 5.2 and later, build this instead:
 - CONFIG_NETFILTER_XT_TARGET_MASQUERADE - IPv6 Masquerading target
 
@@ -102,7 +103,7 @@ Requires kernel RNDIS support:
 
     opkg update
     opkg install kmod-usb-net-rndis
-
+    
 Settings as of 19.07 (router handles DHCP and uses ULA prefix):
 
     Network -> Interfaces -> LAN
@@ -163,6 +164,7 @@ Be sure to set your preferred DNS servers as appropriate:
 
 
 **For SQM Support**
+
 Install required packages:
 
     opkg update
