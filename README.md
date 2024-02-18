@@ -35,12 +35,10 @@ Some features require your kernel to be compiled with specific options to be usa
 
 #### For IPv6 Masquerading:
 
-- CONFIG_NF_NAT_IPV6 - IPv6 NAT
-- CONFIG_IP6_NF_NAT - IPv6 NAT IPTables
-- CONFIG_NF_NAT_MASQUERADE_IPV6 - IPv6 Masquerading
+- (The options for IPv6 SNAT)
 - CONFIG_IP6_NF_TARGET_MASQUERADE - IPv6 Masquerading target
-
-Note: CONFIG_NF_NAT_MASQUERADE_IPV6 cannot be built as a module since kernel 4.18. The entire kernel must be rebuilt for masquerade support. 
+For kernels 5.2 and later, build this instead:
+- CONFIG_NETFILTER_XT_TARGET_MASQUERADE - IPv6 Masquerading target
 
 Note:If your target kernel uses CONFIG_MODULE_SIG_FORCE, learn how to disable it [here](https://forum.xda-developers.com/t/guide-kernel-mod-patching-out-config_module_sig_force-on-stock-kernels.4278981/).
 
@@ -48,25 +46,40 @@ Note:If your target kernel uses CONFIG_MODULE_SIG_FORCE, learn how to disable it
 
 #### Why does USB Tether require root?
 
-We need to be able to access Android ndc for network configuration, the Linux firewall to manage packets, and bind to ports for DNSMasq. USB Tether sets everything up manually and needs escalated privileges to do so.
+We need to be able to set network configuration, configure the Linux firewall to manage packets, and bind to ports for DNSMasq. USB Tether sets everything up manually and needs escalated privileges to do so.
 
 #### Can you do the same thing with wireless Hotspotting?
 
-I think it's possible, but would require framework patches to get signature-level permissions. [VPN Hotspot](https://github.com/Mygod/VPNHotspot) is a great option, though it does not support IPv6 and should always be used with a local or remote VPN.
+Yes, but it's not been implemented yet. [VPN Hotspot](https://github.com/Mygod/VPNHotspot) is a great option, though it does not support IPv6 and should always be used with a local or remote VPN.
 
 #### What if I have a locked down phone?
 
-There are a bunch of paid apps that tunnel data through adb, but they all have their downsides. Running a Shadowsocks server ideally through a tether or alternatively tunneled through adb to a router would work well. There are also a few socks proxies written in Go that would probably be easy to port. The most difficult roadblock is UDP support, otherwise any proxy would do.
+There are a bunch of paid apps that tunnel data through adb, but they all have their downsides. Running a socks server through a tether if allowed by your carrier or alternatively tunneled through adb to a router would work well. I recommended running [hev-socks5-server](https://github.com/heiher/hev-socks5-server) on your phone and installing [openwrt-hev-socks5-tproxy](openwrt-hev-socks5-tproxy) on your router. It will take a bit of work to set up, but it can be used even on very locked-down devices.
 
 #### What if I can't build the kernel modules mentioned?
 
-USB Tether can still be used to tether IPv4 traffic. Wifi and VPN tethers will work fine, but mobile data will be easily detectable through TTL. You use a local VPN like ADGuard, manually set the TTL on your device(s), or use this firewall rule to set the TTL on the bridged traffic passing through your router:
+USB Tether can still be used to tether IPv4 traffic. Wifi and VPN tethers will work fine, but mobile data will be easily detectable through TTL. You use a local VPN like ADGuard, manually set the TTL on your device(s), or use this firewall rule to set the TTL/HL on the bridged traffic passing through your router:
+
+Install required packages
+
+    opkg update
+    opkg install iptables-mod-ipopt
+    opkg install iptables-mod-physdev
+
+System -> Startup -> Local startup
+
+    sysctl -w net.bridge.bridge-nf-call-arptables=1
+    sysctl -w net.bridge.bridge-nf-call-iptables=1
+    sysctl -w net.bridge.bridge-nf-call-ip6tables=1
+
+Network -> Firewall -> Custom Rules
 
     iptables -t mangle -I POSTROUTING -m physdev --physdev-out usb0 -j TTL --ttl-set 65
+    ip6tables -t mangle -I POSTROUTING -m physdev --physdev-out usb0 -m hl ! --hl-eq 255 -j HL --hl-set 65
 
 #### Why does IPv6 require NAT support?
 
-Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. Standard IPv6 tethering has every device is addressed individually in the tunnel and requires a double NAT to modify hoplimit from my testing.
+Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. Standard IPv6 tethering has every device addressed individually which will not be supported. Proxying traffic through TPROXY is supported on many devices and can offer a NAT-like experience, but it only supports TCP/UDP traffic.
 
 #### Can carriers detect this?
 
@@ -89,7 +102,7 @@ Requires kernel RNDIS support:
 
     opkg update
     opkg install kmod-usb-net-rndis
-    
+
 Settings as of 19.07 (router handles DHCP and uses ULA prefix):
 
     Network -> Interfaces -> LAN
@@ -113,16 +126,64 @@ Settings as of 19.07 (router handles DHCP and uses ULA prefix):
     --> IPv6 Settings
     Always announce default router: enabled
 
+Settings as of 21.02 (router handles DHCP and uses ULA prefix):
+
+    Network -> Interfaces -> Devices Tab
+    -> Configure br-lan
+    Bridge Ports: add usb0
+
+    Network -> Interfaces -> LAN
+    -> Advanced Settings
+    IPv6 assignment length: Disabled
+    -> General Settings
+    Protocol: Static Address
+    IPv4 address: 192.168.42.1
+    IPv4 netmask: 255.255.255.0
+    IPv4 gateway: 192.168.42.129
+    IPv6 address: fd00::2/64
+    IPv6 gateway: fd00::1
+    -> DHCP Server
+    --> General Setup
+    Start: 10
+    Limit: 99
+    -->Advanced Settings
+    Force: enabled
+    --> IPv6 Settings
+    RA-Service: server mode
+    DHCPv6-Service: server mode
+    Local IPv6 DNS server: enabled
+    NDP-Proxy: disabled
+    --> IPv6 RA Settings
+    Default Router: forced
+    Enable SLAAC: enabled
+
 Be sure to set your preferred DNS servers as appropriate:
 
-    Network -> Interfaces -> LAN -> General Settings -> Use custom DNS servers
-    Network -> Interfaces -> LAN -> DHCP Server -> IPv6 Settings -> Announced DNS servers
     DHCP and DNS -> General Settings -> DNS forwardings
+
+
+**For SQM Support**
+Install required packages:
+
+    opkg update
+    opkg install luci-app-sqm
+
+Set the interface:
+
+    Network -> SQM QOS -> Basic Settings
+    -> Interface Name: usb0
+
+And create a script as /etc/hotplug.d/usb/11-sqm
+
+    cat << "EOF" > /etc/hotplug.d/usb/11-sqm
+    [ "${ACTION}" = "add" ] && /etc/init.d/sqm restart
+    EOF
+
+This hotplug script is required or SQM will not be applied when the device is replugged.
 
 ## TODO:
 
  - **Static Assignments** - It would be nice if we could reserve addresses for specific devices.
- - **Downstream Watchdog** - Have a periodic check that traffic can pass to a downstream ip.
  - **VPN Bypass** - Make part of the private range route outgoing traffic to a secondary interface
 
 ## DEPENDENCIES:
@@ -131,3 +192,4 @@ Be sure to set your preferred DNS servers as appropriate:
  - tpws - https://github.com/bol-van/zapret
  - hev-socks5-server - https://github.com/heiher/hev-socks5-server
  - hev-socks5-tproxy - https://github.com/heiher/hev-socks5-tproxy
+ - NFQTTL - https://github.com/cyborg-one/nfqttl/
