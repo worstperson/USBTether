@@ -3,9 +3,8 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <linux/types.h>
-#include <linux/netfilter.h>		/* for NF_ACCEPT */
+#include <linux/netfilter.h> /* for NF_ACCEPT */
 #include <errno.h>
-
 
 #include <libnfnetlink/libnfnetlink.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
@@ -26,62 +25,62 @@
 #include <sys/capability.h>
 #include <sys/prctl.h>
 
-#define NFNL_MAX_SUBSYS                 16 /* enough for now */
+#define NFNL_MAX_SUBSYS 16 /* enough for now */
 
 struct nfq_handle
 {
-        struct nfnl_handle *nfnlh;
-        struct nfnl_subsys_handle *nfnlssh;
-        struct nfq_q_handle *qh_list;
+	struct nfnl_handle *nfnlh;
+	struct nfnl_subsys_handle *nfnlssh;
+	struct nfq_q_handle *qh_list;
 };
 
 struct nfnl_subsys_handle {
-        struct nfnl_handle      *nfnlh;
-        u_int32_t               subscriptions;
-        u_int8_t                subsys_id;
-        u_int8_t                cb_count;
-        struct nfnl_callback    *cb;
+	struct nfnl_handle *nfnlh;
+	u_int32_t subscriptions;
+	u_int8_t subsys_id;
+	u_int8_t cb_count;
+	struct nfnl_callback *cb;
 };
 
 struct nfnl_handle {
-        int                     fd;
-        struct sockaddr_nl      local;
-        struct sockaddr_nl      peer;
-        u_int32_t               subscriptions;
-        u_int32_t               seq;
-        u_int32_t               dump;
-        u_int32_t               rcv_buffer_size;
-        u_int32_t               flags;
-        struct nlmsghdr         *last_nlhdr;
-        struct nfnl_subsys_handle subsys[NFNL_MAX_SUBSYS+1];
+	int fd;
+	struct sockaddr_nl local;
+	struct sockaddr_nl peer;
+	u_int32_t subscriptions;
+	u_int32_t seq;
+	u_int32_t dump;
+	u_int32_t rcv_buffer_size;
+	u_int32_t flags;
+	struct nlmsghdr *last_nlhdr;
+	struct nfnl_subsys_handle subsys[NFNL_MAX_SUBSYS+1];
 };
 
 
 struct globalArgs_t {
-    uint16_t ttl;                    /* Time to live */
-    uint16_t numq;                   /* number queue */
-    uint16_t daemon;
+	uint16_t ttl; /* Time to live */
+	uint16_t numq; /* number queue */
+	uint16_t daemon;
 	char pidfile[100];
-    uint32_t sizepacket;
+	uint32_t sizepacket;
 } globalArgs;
 
 static const char *optString = "t:n:l:dp:h?";
 
 static const struct option longOpts[] = {
-    { "ttl", required_argument, NULL, 't' },
-    { "num-queue", required_argument, NULL, 'n' },
-    { "sizepacket", required_argument, NULL, 'l' },
-    { "daemon", no_argument, NULL, 'd' },
+	{ "ttl", required_argument, NULL, 't' },
+	{ "num-queue", required_argument, NULL, 'n' },
+	{ "sizepacket", required_argument, NULL, 'l' },
+	{ "daemon", no_argument, NULL, 'd' },
 	{ "pid-file", required_argument, NULL, 'p' },
-    { "help", no_argument, NULL, 'h' },
-    { NULL, no_argument, NULL, 0 }
+	{ "help", no_argument, NULL, 'h' },
+	{ NULL, no_argument, NULL, 0 }
 };
 
 int *p = NULL;
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data) {
 	int id = 0;
 	struct nfqnl_msg_packet_hdr *ph;
-    ph = nfq_get_msg_packet_hdr(nfa);
+	ph = nfq_get_msg_packet_hdr(nfa);
 	uint8_t *newdata;
 	int len = nfq_get_payload(nfa, &newdata);
 	int ret = 0;
@@ -158,7 +157,6 @@ int main(int argc, char **argv) {
 	int bufsize = 16384*5;
 	char buf[bufsize] __attribute__ ((aligned));
 	int on = 1;
-
 	int opt = 0;
 	int option_index = 0;
 	globalArgs.ttl = 64;
@@ -171,36 +169,36 @@ int main(int argc, char **argv) {
 	opt = getopt_long( argc, argv, optString, longOpts, &option_index );
 
 	while( opt != -1 ) {
-	    switch( opt ) {
+		switch( opt ) {
 			case 't':
 				opta = atoi(optarg);
 				if (opta > 0 && opta <= 255) {
-				    globalArgs.ttl = opta;
-    				    break;
+					globalArgs.ttl = opta;
+						break;
 				} else {
-				    printf("Wrong ttl value: %d\n", opta);
-				    display_usage();
+					printf("Wrong ttl value: %d\n", opta);
+					display_usage();
 				}
 			case 'n':
 				opta = atoi(optarg);
 				if(opta > 0 && opta <= 65535) {
-				    globalArgs.numq = opta;
-    				    break;
+					globalArgs.numq = opta;
+						break;
 				} else {
-				    printf("Wrong number queue value: %d\n", opta);
-				    display_usage();
+					printf("Wrong number queue value: %d\n", opta);
+					display_usage();
 				}
 			case 'd':
-				    globalArgs.daemon = 0;
-    				    break;
+					globalArgs.daemon = 0;
+						break;
 			case 'l':
 				opta = atoi(optarg);
 				if (opta > 0 && opta <= 4294967295) {
-				    globalArgs.sizepacket = opta;
-    				    break;
+					globalArgs.sizepacket = opta;
+						break;
 				} else {
-				    printf("Wrong size limit value: %d\n", opta);
-				    display_usage();
+					printf("Wrong size limit value: %d\n", opta);
+					display_usage();
 				}
 			case 'p':
 				if (strlen(optarg) > 0) {
@@ -208,7 +206,7 @@ int main(int argc, char **argv) {
 					break;
 				} else {
 					printf("Missing pid-file path\n");
-				    display_usage();
+					display_usage();
 				}
 			case 'h':	/* fall-through is intentional */
 			case '?':
@@ -235,8 +233,8 @@ int main(int argc, char **argv) {
 	}
 
 	if(setsockopt(h->nfnlh->fd, SOL_NETLINK, NETLINK_NO_ENOBUFS, &on, sizeof(int)) == -1) {
-	    printf("NETLINK_NO_ENOBUFS ERROR\n");
-	    exit(1);
+		printf("NETLINK_NO_ENOBUFS ERROR\n");
+		exit(1);
 	}
 
 	printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
@@ -290,8 +288,8 @@ int main(int argc, char **argv) {
 	fd = nfq_fd(h);
 
 	if (globalArgs.daemon == 1) {
-	    printf("demonize");
-	    daemonize();
+		printf("demonize");
+		daemonize();
 	}
 
 	if (setpriority(PRIO_PROCESS, getpid(), -20) == -1) {
@@ -324,7 +322,6 @@ int main(int argc, char **argv) {
 		if (rv < 0 && errno == ENOBUFS) {
 			printf("losing packets!\n");
 			continue;
-
 		}
 		perror("recv failed");
 		break;
