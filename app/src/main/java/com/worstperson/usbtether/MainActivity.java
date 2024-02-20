@@ -46,9 +46,6 @@ import android.widget.Switch;
 import android.widget.TextView;
 import com.google.android.material.snackbar.Snackbar;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -151,49 +148,6 @@ public class MainActivity extends AppCompatActivity {
                                     Uri.parse("package:" + MainActivity.this.getPackageName())));
                         }
                     }).show();
-        }
-
-        File file = new File(getFilesDir().getPath() + "/socks.yml");
-        if (!file.exists()) {
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.append("main:\n");
-                writer.append("  workers: 15\n");
-                writer.append("  port: 1080\n");
-                writer.append("  listen-address: '::1'\n");
-                writer.append("  listen-ipv6-only: false\n");
-                writer.append("  bind-address: '::'\n");
-                writer.append("misc:\n");
-                writer.append("  task-stack-size: 30720\n");
-                writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/socks.pid\n\n");
-                writer.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        file = new File(getFilesDir().getPath() + "/tproxy.yml");
-        if (!file.exists()) {
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.append("socks5:\n");
-                writer.append("  port: 1080\n");
-                writer.append("  address: '::1'\n\n");
-                writer.append("tcp:\n");
-                writer.append("  port: 1088\n");
-                writer.append("  address: '::1'\n\n");
-                writer.append("udp:\n");
-                writer.append("  port: 1088\n");
-                writer.append("  address: '::1'\n\n");
-                writer.append("dns:\n");
-                writer.append("  port: 53\n");
-                writer.append("  address: '::'\n");
-                writer.append("  upstream: 8.8.8.8\n");
-                writer.append("misc:\n");
-                writer.append("  task-stack-size: 30720\n");
-                writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/tproxy.pid\n\n");
-                writer.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
 
         TextView net_textview = findViewById(R.id.net_textview);

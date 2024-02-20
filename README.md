@@ -188,9 +188,7 @@ And create a script as /etc/hotplug.d/usb/11-sqm
     [ "${ACTION}" = "add" ] && /etc/init.d/sqm restart
     EOF
 
-This hotplug script is required or SQM will not be applied when the device is replugged.
-Setting Download and Uploaded speed to half the link's capacity has the best results in
-managing bufferbloat on mobile networks, but ymmv.
+This hotplug script is required or SQM will not be applied when the device is replugged. Setting Download and Uploaded speed to half the link's capacity has the best results in managing bufferbloat on mobile networks, but ymmv.
 
 ## TODO:
 
@@ -203,4 +201,4 @@ managing bufferbloat on mobile networks, but ymmv.
  - tpws - https://github.com/bol-van/zapret
  - hev-socks5-server - https://github.com/heiher/hev-socks5-server
  - hev-socks5-tproxy - https://github.com/heiher/hev-socks5-tproxy
- - NFQTTL - https://github.com/cyborg-one/nfqttl/
+ - nfqttl - https://github.com/cyborg-one/nfqttl

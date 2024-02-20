@@ -44,6 +44,9 @@ import androidx.annotation.NonNull;
 import androidx.core.os.HandlerCompat;
 import androidx.core.app.NotificationCompat;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -68,6 +71,7 @@ public class ForegroundService extends Service {
 
     private String usbInterface;
     final private String tetherInterface = "usbt0";
+    private String tetherLocalPrefix = null;
 
     NotificationCompat.Builder notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -164,21 +168,44 @@ public class ForegroundService extends Service {
         }
     }
 
-    private String getPrefix(String iface, String ipv6Prefix) {
+    private String getPrefix(String ipv6Addr) {
+        String result = null;
+        if (ipv6Addr.contains("::")) {
+            result = ipv6Addr.substring(0, ipv6Addr.indexOf("::"));
+        } else {
+            int count = 0;
+            for (int i = 0; i < ipv6Addr.length(); i++)
+                if (ipv6Addr.charAt(i) == ':' && ++count == 4)
+                    result = ipv6Addr.substring(0, i);
+        }
+        return result;
+    }
+
+    private String getLocalPrefix(String tetherInterface) {
         try {
-            NetworkInterface networkInterface = NetworkInterface.getByName(iface);
+            NetworkInterface networkInterface = NetworkInterface.getByName(tetherInterface);
             if (networkInterface != null) {
                 for (InetAddress inetAddress : Collections.list(networkInterface.getInetAddresses())) {
-                    if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress() && inetAddress.getHostAddress() != null && !inetAddress.getHostAddress().equals(ipv6Prefix + "1")) {
-                        String ipv6Addr = inetAddress.getHostAddress();
-                        if (ipv6Addr.contains("::")) {
-                            return ipv6Addr.substring(0, ipv6Addr.indexOf("::"));
-                        } else {
-                            int count = 0;
-                            for (int i = 0; i < ipv6Addr.length(); i++)
-                                if (ipv6Addr.charAt(i) == ':' && ++count == 4)
-                                    return ipv6Addr.substring(0, i);
-                        }
+                    String ipv6Addr;
+                    if (inetAddress instanceof Inet6Address && inetAddress.isLinkLocalAddress() && (ipv6Addr = inetAddress.getHostAddress()) != null) {
+                        return getPrefix(ipv6Addr);
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private String getGlobalPrefix(String ipv6Interface, String ipv6Prefix) {
+        try {
+            NetworkInterface networkInterface = NetworkInterface.getByName(ipv6Interface);
+            if (networkInterface != null) {
+                for (InetAddress inetAddress : Collections.list(networkInterface.getInetAddresses())) {
+                    String ipv6Addr;
+                    if (inetAddress instanceof Inet6Address && !inetAddress.isLinkLocalAddress() && (ipv6Addr = inetAddress.getHostAddress()) != null && !ipv6Addr.equals(ipv6Prefix + "1")) {
+                        return getPrefix(ipv6Addr);
                     }
                 }
             }
@@ -199,6 +226,50 @@ public class ForegroundService extends Service {
             e.printStackTrace();
         }
         return currentInterface;
+    }
+
+    private void socks5Config(String IPv6Interface) {
+        File file = new File(getFilesDir().getPath() + "/socks.yml");
+        try (FileWriter writer = new FileWriter(file)) {
+            writer.append("main:\n");
+            writer.append("  workers: 15\n");
+            writer.append("  port: 1080\n");
+            writer.append("  listen-address: '::1'\n");
+            writer.append("  listen-ipv6-only: true\n");
+            writer.append("  bind-interface: '").append(IPv6Interface).append("'\n");
+            writer.append("misc:\n");
+            writer.append("  task-stack-size: 30720\n");
+            writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/socks.pid\n\n");
+            writer.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void tproxyConfig(String ipv6Prefix) {
+        File file = new File(getFilesDir().getPath() + "/tproxy.yml");
+        try (FileWriter writer = new FileWriter(file)) {
+            writer.append("socks5:\n");
+            writer.append("  port: 1080\n");
+            writer.append("  address: '::1'\n\n");
+            writer.append("  udp: 'udp'\n\n");
+            writer.append("tcp:\n");
+            writer.append("  port: 1088\n");
+            writer.append("  address: '::1'\n\n");
+            writer.append("udp:\n");
+            writer.append("  port: 1088\n");
+            writer.append("  address: '::1'\n\n");
+            writer.append("dns:\n");
+            writer.append("  port: 1053\n");
+            writer.append("  address: '::'\n");
+            writer.append("  upstream: '").append(ipv6Prefix).append("1'\n");
+            writer.append("misc:\n");
+            writer.append("  task-stack-size: 30720\n");
+            writer.append("  pid-file: ").append(getFilesDir().getPath()).append("/tproxy.pid\n\n");
+            writer.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
@@ -266,16 +337,19 @@ public class ForegroundService extends Service {
                         natApplied = false;
                     }
                     String ipv6Addr = setupSNAT(currentIPv6Interface, ipv6TYPE.equals("SNAT"));
+                    if (ipv6TYPE.equals("TPROXY")) {
+                        socks5Config(currentIPv6Interface);
+                    }
                     SharedPreferences.Editor edit = sharedPref.edit();
                     edit.putString("lastIPv4Interface", currentIPv4Interface);
                     edit.putString("lastIPv6Interface", currentIPv6Interface);
                     edit.putString("lastIPv6", ipv6Addr);
                     edit.apply();
-                    if (Script.configureTether(tetherInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, setTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention)) {
+                    if (Script.configureTether(tetherInterface, tetherLocalPrefix, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix, ipv6TYPE, ipv6Addr, setTTL, dnsmasq, getApplicationInfo().nativeLibraryDir, getFilesDir().getPath(), clientBandwidth, dpiCircumvention)) {
                         natApplied = true;
                         if (ipv6TYPE.equals("TPROXY")) {
                             // Add TPROXY exception
-                            String prefix = getPrefix(currentIPv6Interface, ipv6Prefix);
+                            String prefix = getGlobalPrefix(currentIPv6Interface, ipv6Prefix);
                             if (prefix != null) {
                                 Log.i("TetherTPROXY", prefix);
                                 Script.setTPROXYRoute(prefix);
@@ -311,7 +385,7 @@ public class ForegroundService extends Service {
                         }
                         if (ipv6TYPE.equals("TPROXY")) {
                             // Add TPROXY exception
-                            String prefix = getPrefix(currentIPv6Interface, ipv6Prefix);
+                            String prefix = getGlobalPrefix(currentIPv6Interface, ipv6Prefix);
                             if (prefix != null) {
                                 Log.i("TetherTPROXY", prefix);
                                 Script.setTPROXYRoute(prefix);
@@ -319,7 +393,7 @@ public class ForegroundService extends Service {
                         }
                         if (usbReconnect) {
                             Script.unconfigureInterface(tetherInterface);
-                            if (Script.configureInterface(tetherInterface, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix)) {
+                            if (Script.configureInterface(tetherInterface, tetherLocalPrefix, currentIPv4Interface, currentIPv6Interface, ipv4Addr, ipv6Prefix)) {
                                 networkStatus = "Tether is configured";
                                 notification.setContentTitle(networkStatus + ", " + usbStatus);
                                 mNotificationManager.notify(1, notification.build());
@@ -585,9 +659,12 @@ public class ForegroundService extends Service {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String setTTL = sharedPref.getString("setTTL", "None");
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
+        String ipv6Prefix = sharedPref.getBoolean("ipv6Default", false) ? "2001:db8::" : "fd00::";
 
         assert setTTL != null;
         assert ipv6TYPE != null;
+
+        tproxyConfig(ipv6Prefix);
 
         SharedPreferences.Editor edit = sharedPref.edit();
         if ((setTTL.equals("TTL/HL") && !hasTTL) || (setTTL.equals("NFQUEUE") && !hasNFQUEUE)) {
@@ -620,6 +697,9 @@ public class ForegroundService extends Service {
 
         usbInterface = Script.configureRNDIS(getApplicationInfo().nativeLibraryDir);
         Script.createBridge(tetherInterface);
+        tetherLocalPrefix = getLocalPrefix(tetherInterface);
+        assert tetherLocalPrefix != null; // FIXME should never be null but...
+
         if (!HandlerCompat.hasCallbacks(handler, delayedRestore)) {
             handler.postDelayed(delayedRestore, 5000);
         }

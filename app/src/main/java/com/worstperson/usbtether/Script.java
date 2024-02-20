@@ -205,6 +205,20 @@ public class Script {
         shellCommand("ip link set " + tetherInterface + " down");
     }
 
+    static boolean configureRoutes(String tetherInterface, String tetherLocalPrefix, String ipv4Addr, String ipv6Prefix) {
+        Log.i("USBTether", "Setting IP routes");
+        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        return shellCommand("ip route add " + ipv4Prefix + ".0/24 dev " + tetherInterface + " table local_network proto static scope link")
+                && shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link")
+                && shellCommand("ip -6 route add " + tetherLocalPrefix + "::/64 dev " + tetherInterface + " table local_network proto static scope link");
+    }
+
+    static void unconfigureRoutes(String tetherInterface) {
+        Log.i("USBTether", "Removing IP routes");
+        shellCommand("ip route flush dev " + tetherInterface);
+        shellCommand("ip -6 route flush dev " + tetherInterface);
+    }
+
     static boolean configureRules(String tetherInterface, String ipv4Interface, String ipv6Interface) {
         Log.i("USBTether", "Setting IP rules");
         return shellCommand("ip rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network")
@@ -225,24 +239,11 @@ public class Script {
         shellCommand("ip -6 rule del pref 540");
     }
 
-    static boolean configureRoutes(String tetherInterface, String ipv4Addr, String ipv6Prefix) {
-        Log.i("USBTether", "Setting IP routes");
-        String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
-        return shellCommand("ip route add " + ipv4Prefix + ".0/24 dev " + tetherInterface + " table local_network proto static scope link")
-                && shellCommand("ip -6 route add " + ipv6Prefix + "/64 dev " + tetherInterface + " table local_network proto static scope link");
-    }
-
-    static void unconfigureRoutes(String tetherInterface) {
-        Log.i("USBTether", "Removing IP routes");
-        shellCommand("ip route flush dev " + tetherInterface);
-        shellCommand("ip -6 route flush dev " + tetherInterface);
-    }
-
-    static boolean configureInterface(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
+    static boolean configureInterface(String tetherInterface, String tetherLocalPrefix, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix) {
         Log.i("USBTether", "Configuring interface");
         return shellCommand("ip link set dev " + tetherInterface + " down")
                 && configureAddresses(tetherInterface, ipv4Addr, ipv6Prefix)
-                && configureRoutes(tetherInterface, ipv4Addr, ipv6Prefix)
+                && configureRoutes(tetherInterface, tetherLocalPrefix, ipv4Addr, ipv6Prefix)
                 && configureRules(tetherInterface, ipv4Interface, ipv6Interface);
     }
 
@@ -354,8 +355,8 @@ public class Script {
         iptables(true, "mangle", "I", "TPROXY_ROUTE_PREROUTING -d " + prefix + "::/64 -j RETURN");
     }
 
-    static boolean configureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
-        if (configureInterface(tetherInterface, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
+    static boolean configureTether(String tetherInterface, String tetherLocalPrefix, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
+        if (configureInterface(tetherInterface, tetherLocalPrefix, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
             shellCommand("echo 1 > /proc/sys/net/ipv6/conf/all/forwarding");
@@ -372,12 +373,12 @@ public class Script {
                     iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
             } else if (setTTL.equals("NFQUEUE")) {
-                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6464");
+                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6464");
+                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
                 }
                 shellCommand("rm " + appData + "/nfqttl.pid");
-                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6464 --pid-file=" + appData + "/nfqttl.pid &");
+                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6465 --pid-file=" + appData + "/nfqttl.pid &");
             }
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per IP address
@@ -388,14 +389,11 @@ public class Script {
             }
             if (dnsmasq) {
                 // DNSMasq has a bug with --port when an interface is lost and restored, it will lose it's UDP binding and will never restore it
-                shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
-                } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --interface=" + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --server=8.8.8.8 --server=8.8.4.4 --leasefile-ro --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --interface=" + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --leasefile-ro --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
             if (ipv6TYPE.equals("TPROXY")) {
@@ -463,9 +461,9 @@ public class Script {
                 iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
             }
         } else if (setTTL.equals("NFQUEUE")) {
-            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6464");
+            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
             if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6464");
+                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
             }
             killProcess(appData + "/nfqttl.pid");
         }
@@ -485,14 +483,11 @@ public class Script {
             if (!shellCommand("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]")) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
                 Log.w("USBTether", "No dnsmasq process, restarting");
-                shellCommand("rm " + appData + "/dnsmasq.leases");
                 shellCommand("rm " + appData + "/dnsmasq.pid");
                 if (ipv6TYPE.equals("None")) {
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-option=option:dns-server," + ipv4Addr + " --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
-                } else if (ipv6TYPE.equals("TPROXY")) { // HACK - hevtproxy IPv6 DNS proxying seems unsupported or maybe broken
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[2001:4860:4860::8888],[2001:4860:4860::8844] --server=8.8.8.8 --server=8.8.4.4 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --interface=" + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --server=8.8.8.8 --server=8.8.4.4 --leasefile-ro --pid-file=" + appData + "/dnsmasq.pid &");
                 } else {
-                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --listen-address=" + ipv4Addr + "," + ipv6Prefix + "1 --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --dhcp-option=option:dns-server," + ipv4Addr + " --dhcp-option=option6:dns-server,[" + ipv6Prefix + "1] --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --dhcp-leasefile=" + appData + "/dnsmasq.leases --pid-file=" + appData + "/dnsmasq.pid &");
+                    shellCommand(libDIR + "/libdnsmasq.so --bind-interfaces --interface=" + tetherInterface + " --keep-in-foreground --no-resolv --no-poll --domain-needed --bogus-priv --dhcp-authoritative --dhcp-range=" + ipv4Prefix + ".10," + ipv4Prefix + ".99,1h --dhcp-range=" + ipv6Prefix + "10," + ipv6Prefix + "99,slaac,64,1h --server=8.8.8.8 --server=8.8.4.4 --server=2001:4860:4860::8888 --server=2001:4860:4860::8844 --leasefile-ro --pid-file=" + appData + "/dnsmasq.pid &");
                 }
             }
         }
@@ -500,7 +495,7 @@ public class Script {
             if (!shellCommand("[ -f " + appData + "/nfqttl.pid -a -d /proc/$(cat " + appData + "/nfqttl.pid) ]")) {
                 Log.w("USBTether", "No nfqttl process, restarting");
                 shellCommand("rm " + appData + "/nfqttl.pid");
-                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6464 --pid-file=" + appData + "/nfqttl.pid &");
+                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6465 --pid-file=" + appData + "/nfqttl.pid &");
             }
         }
         if (dpiCircumvention) {
