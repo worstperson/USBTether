@@ -173,9 +173,11 @@ public class ForegroundService extends Service {
             result = ipv6Addr.substring(0, ipv6Addr.indexOf("::"));
         } else {
             int count = 0;
-            for (int i = 0; i < ipv6Addr.length(); i++)
-                if (ipv6Addr.charAt(i) == ':' && ++count == 4)
+            for (int i = 0; i < ipv6Addr.length(); i++) {
+                if (ipv6Addr.charAt(i) == ':' && ++count == 4) {
                     result = ipv6Addr.substring(0, i);
+                }
+            }
         }
         return result;
     }
@@ -273,6 +275,12 @@ public class ForegroundService extends Service {
 
     // FIXME - BUG - disable IPv6 when IPv6 is unavailable
     // FIXME - FEATURE - disable IPv6 when MTU is lower than spec allows
+    // FIXME !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // FIXME - Increase timer after failed cellular recovery
+    // FIXME - Increase timer after failed VPN recovery
+    // FIXME - Add upstream check when starting a VPN service, wait on on network availability
+    // FIXME - Remove callback when waiting on network availability, use receivers instead
+    // FIXME !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     private void restoreTether() {
 
         NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -314,7 +322,7 @@ public class ForegroundService extends Service {
             if (currentIPv6Interface == null || !currentIPv6Interface.equals(cellularIPv6)) {
                 if (cellularWatchdog) {
                     // Only check that any protocol is working, it's not the tethered network so we don't care if just one goes down
-                    // Keeps from having to pull APN configs, check for plat servers, and get caught in loops during partial outages
+                    // Keeps from having to pull APN configs, check for plat servers, and getting caught in loops during partial outages
                     cellularUP = Script.testConnection(cellularIPv4, false) || Script.testConnection(cellularIPv6, true);
                 }
             } else {

@@ -117,9 +117,8 @@ public class Script {
             Shell.Result shell = Shell.cmd("svc usb getGadgetHalVersion").exec();
             if (shell.isSuccess()) {
                 String version = shell.getOut().get(0);
-                if (version.equals("unknown")) {
-                    useGadget = false;
-                } else if (!(version.equals("V1_0") || version.equals("V1_1"))) {
+                // State should never be "unknown", but we know it's not LegacyHal, so just ignore it
+                if (!(version.equals("unknown") || version.equals("V1_0") || version.equals("V1_1"))) {
                     hasNCM = true;
                 }
             }
