@@ -80,6 +80,7 @@ public class Script {
     static void createBridge(String tetherInterface) {
         shellCommand("ip link add name " + tetherInterface + " type bridge");
         shellCommand("ip link set " + tetherInterface + " up");
+        shellCommand("echo 0 > /proc/sys/net/ipv6/conf/" + tetherInterface + "/accept_ra");
     }
 
     static void bindBridge(String tetherInterface, String usbInterface) {
