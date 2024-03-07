@@ -46,7 +46,7 @@ For kernels 5.2 and later, build this instead:
 
 - CONFIG_NETFILTER_XT_TARGET_MASQUERADE - IPv6 Masquerading target
 
-Note:If your target kernel uses CONFIG_MODULE_SIG_FORCE, learn how to disable it [here](https://forum.xda-developers.com/t/guide-kernel-mod-patching-out-config_module_sig_force-on-stock-kernels.4278981/).
+Note: If your target kernel uses CONFIG_MODULE_SIG_FORCE, learn how to disable it [here](https://forum.xda-developers.com/t/guide-kernel-mod-patching-out-config_module_sig_force-on-stock-kernels.4278981/).
 
 ## Q&A:
 
@@ -87,7 +87,7 @@ The ip6tables rule is generally not needed, but included just in case. Can be us
 
 #### Why does IPv6 require NAT support?
 
-Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. Standard IPv6 tethering has every device addressed individually which will not be supported. Proxying traffic through TPROXY is supported on many devices and can offer a NAT-like experience, but it only supports TCP/UDP traffic.
+Standard IPv6 tethering has every device addressed individually on the mobile network and is trivially detectable. Using NAT allows us to tether to any interface, modify traffic as it passes, and hide network topology. Proxying traffic through TPROXY is supported on many devices and can offer a NAT-like experience, but it only supports TCP/UDP traffic.
 
 #### Can carriers detect this?
 
@@ -95,7 +95,7 @@ Hiding devices behind NATs and setting the TTL/HL goes a long way towards avoidi
 
 ## Router Setup:
 
-These setups typically use the phone as the router bridged to a consumer router configured as a wireless AP to avoid double NAT. Try to avoid any Broadcom MIPS routers as their USB support is very poor. Something like a RPi should be used as a bridge device when tethering with an otherwise unsuitable router. OpenWRT devices are highly recommended, Qualcomm IPQ Linksys routers go for pretty cheap and are well suited to this task. OpenWRT makes it possible to run the DHCP server on the router and offers many other powerful resources for managing your network.
+These setups typically use the phone as the router bridged to a consumer router configured as a wireless AP to avoid double NAT. Try to avoid any Broadcom MIPS routers as their USB support is very poor. Something like a RPi should be used as a bridge device when tethering with an otherwise unsuitable router. OpenWRT devices are highly recommended, Qualcomm IPQ Linksys routers go for cheap and are well suited to this task. OpenWRT makes it possible to run the DHCP server on the router and offers many other powerful resources for managing your network.
 
 You must also be prepaired for testing and problem solving software/hardware quirks. As an example, on my EA6350v3 I had to:
 
@@ -188,7 +188,7 @@ And create a script as /etc/hotplug.d/usb/11-sqm
     [ "${ACTION}" = "add" ] && /etc/init.d/sqm restart
     EOF
 
-This hotplug script is required or SQM will not be applied when the device is replugged. Setting Download and Uploaded speed to half the link's capacity has the best results in managing bufferbloat on mobile networks, but ymmv.
+This hotplug script is required or SQM will not be applied when the device is replugged. Setting Download and Uploaded speed to half the link's capacity has the best results for me in managing bufferbloat on mobile networks, but ymmv.
 
 ## TODO:
 
@@ -197,8 +197,7 @@ This hotplug script is required or SQM will not be applied when the device is re
 
 ## DEPENDENCIES:
 
- - dnsmasq - https://github.com/worstperson/dnsmasq
- - tpws - https://github.com/bol-van/zapret
+ - dnsmasq - https://thekelleys.org.uk/dnsmasq/doc.html
+ - nfqws and tpws - https://github.com/bol-van/zapret
  - hev-socks5-server - https://github.com/heiher/hev-socks5-server
  - hev-socks5-tproxy - https://github.com/heiher/hev-socks5-tproxy
- - nfqttl - https://github.com/cyborg-one/nfqttl
