@@ -355,7 +355,7 @@ public class Script {
         iptables(true, "mangle", "I", "TPROXY_ROUTE_PREROUTING -d " + prefix + "::/64 -j RETURN");
     }
 
-    static boolean configureTether(String tetherInterface, String tetherLocalPrefix, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
+    static boolean configureTether(String tetherInterface, String tetherLocalPrefix, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean mangleTTL, boolean dnsmasq, String libDIR, String appData, String clientBandwidth, boolean dpiCircumvention) {
         if (configureInterface(tetherInterface, tetherLocalPrefix, ipv4Interface, ipv6Interface, ipv4Addr, ipv6Prefix)) {
             Log.i("USBTether", "Enabling IP forwarding");
             shellCommand("echo 1 > /proc/sys/net/ipv4/ip_forward");
@@ -366,19 +366,6 @@ public class Script {
                 configureNAT(true, tetherInterface, ipv6Interface, upstreamIPv6, ipv6TYPE.equals("SNAT"));
             } else if (ipv6TYPE.equals("TPROXY")) {
                 configureTPROXY();
-            }
-            if (setTTL.equals("TTL/HL")) {
-                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
-                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
-                }
-            } else if (setTTL.equals("NFQUEUE")) {
-                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
-                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
-                }
-                shellCommand("rm " + appData + "/nfqttl.pid");
-                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6465 --pid-file=" + appData + "/nfqttl.pid &");
             }
             String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
             if (Integer.parseInt(clientBandwidth) > 0) { // Set the maximum allowed bandwidth per IP address
@@ -402,13 +389,38 @@ public class Script {
                 shellCommand(libDIR + "/libhevserver.so " + appData + "/socks.yml &");
                 shellCommand(libDIR + "/libhevtproxy.so " + appData + "/tproxy.yml &");
             }
-            if (dpiCircumvention) {
-                iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
-                iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+            if (mangleTTL && hasTTL) {
+                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                    iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-                    iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-                } else if (ipv6TYPE.equals("TPROXY")) {
+                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
+                }
+            }
+            if (hasNFQUEUE && ((mangleTTL && !hasTTL) || dpiCircumvention)) {
+                iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
+                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                    iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
+                }
+                String optTTL = "";
+                if (mangleTTL && !hasTTL) {
+                    optTTL = "--force-ttl ";
+                }
+                String optDPI = "";
+                if (dpiCircumvention) {
+                    optDPI = "--dpi-desync=split2 ";
+                }
+                shellCommand("rm " + appData + "/nfqws.pid");
+                shellCommand(libDIR + "/libnfqws.so " + optTTL + optDPI + "--qnum=6465 --pidfile=" + appData + "/nfqws.pid &");
+            }
+            if (dpiCircumvention && (!hasNFQUEUE || ipv6TYPE.equals("TPROXY"))) {
+                if (!hasNFQUEUE) {
+                    iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
+                    iptables(false, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+                    if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                        iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                        iptables(true, "nat", "I", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                    }
+                }
+                if (ipv6TYPE.equals("TPROXY")) {
                     // Huh, only need the IP_TRANSPARENT patch for IPv4?
                     iptables(true, "mangle", "I", "TPROXY_MARK_PREROUTING -p tcp --dport 80 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
                     iptables(true, "mangle", "I", "TPROXY_MARK_PREROUTING -p tcp --dport 443 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
@@ -425,8 +437,9 @@ public class Script {
         return true;
     }
 
-    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, String setTTL, boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
+    static void unconfigureTether(String tetherInterface, String ipv4Interface, String ipv6Interface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE,/* upstreamIPv4,*/ String upstreamIPv6, boolean mangleTTL, boolean dnsmasq, String appData, String clientBandwidth, boolean dpiCircumvention) {
         String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
+        Log.i("USBTether", "Restoring tether interface state");
         if (dnsmasq) {
             killProcess(appData + "/dnsmasq.pid");
         }
@@ -434,38 +447,41 @@ public class Script {
             killProcess(appData + "/socks.pid");
             killProcess(appData + "/tproxy.pid");
         }
-        if (dpiCircumvention) {
-            killProcess(appData + "/tpws.pid");
-            iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
-            iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+        if (mangleTTL && hasTTL) {
+            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
+            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Won't work with encapsulated traffic
+                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
+            }
+        }
+        if (hasNFQUEUE && ((mangleTTL && !hasTTL) || dpiCircumvention)) {
+            killProcess(appData + "/nfqws.pid");
+            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
             if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-                iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
-            } else if (ipv6TYPE.equals("TPROXY")) {
+                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
+            }
+        }
+        if (dpiCircumvention && (!hasNFQUEUE || ipv6TYPE.equals("TPROXY"))) {
+            killProcess(appData + "/tpws.pid");
+            if (!hasNFQUEUE) {
+                iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to " + ipv4Addr + ":8123");
+                iptables(false, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to " + ipv4Addr + ":8123");
+                if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
+                    iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 80 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                    iptables(true, "nat", "D", "PREROUTING -i " + tetherInterface + " -p tcp --dport 443 -j DNAT --to [" + ipv6Prefix + "1]:8123");
+                }
+            }
+            if (ipv6TYPE.equals("TPROXY")) {
                 iptables(true, "mangle", "D", "TPROXY_MARK_PREROUTING -p tcp --dport 80 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
                 iptables(true, "mangle", "D", "TPROXY_MARK_PREROUTING -p tcp --dport 443 -j TPROXY --on-ip " + ipv6Prefix + "1 --on-port 8123 --tproxy-mark 8123");
                 shellCommand("ip -6 rule delete pref 520 fwmark 8123 table 998");
                 shellCommand("ip -6 route delete local default dev lo table 998");
             }
         }
-        Log.i("USBTether", "Restoring tether interface state");
         if (Integer.parseInt(clientBandwidth) > 0) {
             iptables(false, "filter", "D", "FORWARD -i " + ipv4Interface + " -o " + tetherInterface + " -d " + ipv4Prefix + ".0/24 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
             if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Not supported by TPROXY
                 iptables(true, "filter", "D", "FORWARD -i " + ipv6Interface + " -o " + tetherInterface + " -d " + ipv6Prefix + "/64 -m tcp -p tcp -m hashlimit --hashlimit-mode dstip --hashlimit-above " + clientBandwidth + "kb/s --hashlimit-name max_tether_bandwidth -j DROP");
             }
-        }
-        if (setTTL.equals("TTL/HL")) {
-            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j TTL --ttl-set 64");
-            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) { // Won't work with encapsulated traffic
-                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
-            }
-        } else if (setTTL.equals("NFQUEUE")) {
-            iptables(false, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
-            if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
-                iptables(true, "mangle", "D", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j NFQUEUE --queue-num 6465");
-            }
-            killProcess(appData + "/nfqttl.pid");
         }
         unconfigureNAT(false, tetherInterface, ipv4Interface, "", false);
         if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
@@ -478,7 +494,7 @@ public class Script {
         shellCommand("echo 0 > /proc/sys/net/ipv6/conf/all/forwarding");
     }
 
-    static void checkProcesses(String tetherInterface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE, String setTTL, boolean dnsmasq, boolean dpiCircumvention, String libDIR, String appData) {
+    static void checkProcesses(String tetherInterface, String ipv4Addr, String ipv6Prefix, String ipv6TYPE, boolean mangleTTL, boolean dnsmasq, boolean dpiCircumvention, String libDIR, String appData) {
         if (dnsmasq) {
             if (!shellCommand("[ -f " + appData + "/dnsmasq.pid -a -d /proc/$(cat " + appData + "/dnsmasq.pid) ]")) {
                 String ipv4Prefix = ipv4Addr.substring(0, ipv4Addr.lastIndexOf("."));
@@ -491,14 +507,22 @@ public class Script {
                 }
             }
         }
-        if (setTTL.equals("NFQUEUE")) {
-            if (!shellCommand("[ -f " + appData + "/nfqttl.pid -a -d /proc/$(cat " + appData + "/nfqttl.pid) ]")) {
+        if (hasNFQUEUE && ((mangleTTL && !hasTTL) || dpiCircumvention)) {
+            if (!shellCommand("[ -f " + appData + "/nfqws.pid -a -d /proc/$(cat " + appData + "/nfqws.pid) ]")) {
                 Log.w("USBTether", "No nfqttl process, restarting");
-                shellCommand("rm " + appData + "/nfqttl.pid");
-                shellCommand(libDIR + "/libnfqttl.so --daemon --num-queue=6465 --pid-file=" + appData + "/nfqttl.pid &");
+                String optTTL = "";
+                if (mangleTTL && !hasTTL) {
+                    optTTL = "--force-ttl ";
+                }
+                String optDPI = "";
+                if (dpiCircumvention) {
+                    optDPI = "--dpi-desync=split2 ";
+                }
+                shellCommand("rm " + appData + "/nfqws.pid");
+                shellCommand(libDIR + "/libnfqws.so " + optTTL + optDPI + "--qnum=6465 --pidfile=" + appData + "/nfqws.pid &");
             }
         }
-        if (dpiCircumvention) {
+        if (dpiCircumvention && (!hasNFQUEUE || ipv6TYPE.equals("TPROXY"))) {
             if (!shellCommand("[ -f " + appData + "/tpws.pid -a -d /proc/$(cat " + appData + "/tpws.pid) ]")) {
                 Log.w("USBTether", "No tpws process, restarting");
                 shellCommand("rm " + appData + "/tpws.pid");

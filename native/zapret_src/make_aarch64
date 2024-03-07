@@ -5,8 +5,8 @@ export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar
 export AS=$TOOLCHAIN/bin/llvm-as
-export CC=$TOOLCHAIN/bin/aarch64-linux-android23-clang
-export CXX=$TOOLCHAIN/bin/aarch64-linux-android23-clang++
+export CC=$TOOLCHAIN/bin/aarch64-linux-android24-clang
+export CXX=$TOOLCHAIN/bin/aarch64-linux-android24-clang++
 export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
@@ -18,6 +18,7 @@ wget -nc https://www.netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
 tar -xf libmnl-1.0.5.tar.bz2
 cd libmnl-1.0.5
 ./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make clean
 make
 make install
 cd ..
@@ -27,6 +28,7 @@ wget -nc https://www.netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.
 tar -xf libnfnetlink-1.0.2.tar.bz2
 cd libnfnetlink-1.0.2
 ./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make clean
 make
 make install
 cd ..
@@ -36,16 +38,41 @@ wget -nc https://www.netfilter.org/projects/libnetfilter_queue/files/libnetfilte
 tar -xf libnetfilter_queue-1.0.5.tar.bz2
 patch -p1 < libnetfilter_queue-1.0.5.patch
 cd libnetfilter_queue-1.0.5
-export CFLAGS+=' -fPIC -I../../sysroot_aarch64/include'
-export LDFLAGS+=' -fPIC'
+export CFLAGS='-fPIC -I../../sysroot_aarch64/include'
+export LDFLAGS='-fPIC'
 export PKG_CONFIG_PATH='../sysroot_aarch64/lib/pkgconfig'
 ./configure --prefix=$PWD/../sysroot_aarch64 --host=aarch64-linux-android --enable-shared=no
+make clean
 make
 make install
 mkdir ../sysroot_aarch64/include/src
 cp config.h ../sysroot_aarch64/include/src/
 cp src/internal.h ../sysroot_aarch64/include/src/
 cd ..
+export CFLAGS=''
+export LDFLAGS=''
 
-$CC -I./sysroot_aarch64/include/ -L./sysroot_aarch64/lib/ -l:libmnl.a -l:libnetfilter_queue.a -l:libnfnetlink.a -o nfqttl_aarch64 nfqttl.c
-$STRIP nfqttl_aarch64
+rm -R zlib-1.3.1
+wget -nc https://www.zlib.net/zlib-1.3.1.tar.gz
+tar -xf zlib-1.3.1.tar.gz
+cd zlib-1.3.1
+export CHOST=aarch64-linux-android
+./configure --prefix=$PWD/../sysroot_aarch64 --static
+make clean
+make
+make install
+cd ..
+
+git clone --depth 1 https://github.com/bol-van/zapret.git
+patch -N -p1 < nfqws.patch
+cd zapret/nfq/
+make clean
+export LDFLAGS='-I../../sysroot_aarch64/include/ -L../../sysroot_aarch64/lib/'
+make
+$STRIP nfqws
+mv nfqws ../../nfqws_arch64
+cd ../tpws/
+make clean
+make
+$STRIP tpws
+mv tpws ../../tpws_arch64

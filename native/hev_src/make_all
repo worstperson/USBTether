@@ -1,0 +1,22 @@
+#!/bin/sh
+
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+
+mkdir hev-socks5-server
+cd hev-socks5-server
+git clone --recursive --depth 1 https://github.com/heiher/hev-socks5-server jni
+patch -N -p1 < ../server.patch
+cd jni
+$ANDROID_NDK_HOME/ndk-build
+mv ../libs/armeabi-v7a/hev-socks5-server ../../hev-socks5-server_arm7a
+mv ../libs/arm64-v8a/hev-socks5-server ../../hev-socks5-server_aarch64
+cd ../..
+
+mkdir hev-socks5-tproxy
+cd hev-socks5-tproxy
+git clone --recursive --depth 1 https://github.com/heiher/hev-socks5-tproxy jni
+patch -N -p1 < ../tproxy.patch
+cd jni
+$ANDROID_NDK_HOME/ndk-build
+mv ../libs/armeabi-v7a/hev-socks5-tproxy ../../hev-socks5-tproxy_arm7a
+mv ../libs/arm64-v8a/hev-socks5-tproxy ../../hev-socks5-tproxy_aarch64

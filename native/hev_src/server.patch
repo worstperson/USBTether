@@ -1,0 +1,12 @@
+diff -ruN org/jni/Application.mk patch/jni/Application.mk
+--- org/jni/Application.mk	2024-03-06 23:03:52.741907698 -0600
++++ patch/jni/Application.mk	2024-03-06 23:04:48.011905863 -0600
+@@ -14,7 +14,7 @@
+ #
+ 
+ APP_OPTIM := release
+-APP_PLATFORM := android-21
++APP_PLATFORM := android-24
+ APP_ABI := armeabi-v7a arm64-v8a
+ APP_CFLAGS := -O3
+ NDK_TOOLCHAIN_VERSION := clang

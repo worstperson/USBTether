@@ -1,0 +1,78 @@
+#!/bin/sh
+
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export HOST_TAG=linux-x86_64
+export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
+export AR=$TOOLCHAIN/bin/llvm-ar
+export AS=$TOOLCHAIN/bin/llvm-as
+export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi24-clang
+export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi24-clang++
+export LD=$TOOLCHAIN/bin/ld
+export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+rm -R sysroot_arm7a
+
+rm -R libmnl-1.0.5
+wget -nc https://www.netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
+tar -xf libmnl-1.0.5.tar.bz2
+cd libmnl-1.0.5
+./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
+make clean
+make
+make install
+cd ..
+
+rm -R libnfnetlink-1.0.2
+wget -nc https://www.netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.2.tar.bz2
+tar -xf libnfnetlink-1.0.2.tar.bz2
+cd libnfnetlink-1.0.2
+./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
+make clean
+make
+make install
+cd ..
+
+rm -R libnetfilter_queue-1.0.5
+wget -nc https://www.netfilter.org/projects/libnetfilter_queue/files/libnetfilter_queue-1.0.5.tar.bz2
+tar -xf libnetfilter_queue-1.0.5.tar.bz2
+patch -p1 < libnetfilter_queue-1.0.5.patch
+cd libnetfilter_queue-1.0.5
+export CFLAGS+=' -fPIC -I../../sysroot_arm7a/include'
+export LDFLAGS+=' -fPIC'
+export PKG_CONFIG_PATH='../sysroot_arm7a/lib/pkgconfig'
+./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
+make clean
+make
+make install
+mkdir ../sysroot_arm7a/include/src
+cp config.h ../sysroot_arm7a/include/src/
+cp src/internal.h ../sysroot_arm7a/include/src/
+cd ..
+export CFLAGS=''
+export LDFLAGS=''
+
+rm -R zlib-1.3.1
+wget -nc https://www.zlib.net/zlib-1.3.1.tar.gz
+tar -xf zlib-1.3.1.tar.gz
+cd zlib-1.3.1
+export CHOST=armv7a-linux-android
+./configure --prefix=$PWD/../sysroot_arm7a --static
+make clean
+make
+make install
+cd ..
+
+git clone --depth 1 https://github.com/bol-van/zapret.git
+patch -N -p1 < nfqws.patch
+cd zapret/nfq/
+make clean
+export LDFLAGS='-I../../sysroot_arm7a/include/ -L../../sysroot_arm7a/lib/'
+make
+$STRIP nfqws
+mv nfqws ../../nfqws_arm7a
+cd ../tpws
+make clean
+make
+$STRIP tpws
+mv tpws ../../tpws_arm7a

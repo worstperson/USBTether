@@ -1,0 +1,112 @@
+diff -ruN org/zapret/nfq/nfqws.c patch/zapret/nfq/nfqws.c
+--- org/zapret/nfq/nfqws.c	2024-03-06 20:49:39.922176361 -0600
++++ patch/zapret/nfq/nfqws.c	2024-03-06 20:51:04.598840234 -0600
+@@ -31,6 +31,7 @@
+ 
+ #ifdef __linux__
+ #include <libnetfilter_queue/libnetfilter_queue.h>
++#include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+ #define NF_DROP 0
+ #define NF_ACCEPT 1
+ #endif
+@@ -88,6 +89,7 @@
+ static packet_process_result processPacketData(uint32_t *mark, const char *ifout, uint8_t *data_pkt, size_t len_pkt)
+ {
+ 	struct ip *ip = NULL;
++	struct iphdr *iphdr = NULL;
+ 	struct ip6_hdr *ip6hdr = NULL;
+ 	struct tcphdr *tcphdr = NULL;
+ 	struct udphdr *udphdr = NULL;
+@@ -107,6 +109,11 @@
+ 	if (proto_check_ipv4(data, len))
+ 	{
+ 		ip = (struct ip *) data;
++		if (params.force_ttl)
++		{
++			iphdr = (struct iphdr *) data;
++			iphdr->ttl = params.ttl;
++		}
+ 		proto = ip->ip_p;
+ 		proto_skip_ipv4(&data, &len);
+ 		if (params.debug)
+@@ -118,6 +125,10 @@
+ 	else if (proto_check_ipv6(data, len))
+ 	{
+ 		ip6hdr = (struct ip6_hdr *) data;
++		if (params.force_ttl)
++		{
++			ip6hdr->ip6_hlim = params.ttl;
++		}
+ 		proto_skip_ipv6(&data, &len, &proto, NULL);
+ 		if (params.debug)
+ 		{
+@@ -185,6 +196,13 @@
+ 		if (params.debug) printf("\n");
+ 	}
+ 
++	if (params.force_ttl && res == pass) {
++		if (iphdr) {
++			nfq_ip_set_checksum(iphdr);
++		}
++		res = modify;
++	}
++
+ 	return res;
+ }
+ 
+@@ -523,6 +541,8 @@
+ #ifdef __linux__
+ 		" --bind-fix4\t\t\t\t\t; apply outgoing interface selection fix for generated ipv4 packets\n"
+ 		" --bind-fix6\t\t\t\t\t; apply outgoing interface selection fix for generated ipv6 packets\n"
++		" --force-ttl\t\t\t\t\t; overwrite the ttl/hl for traffic passing through nfqws\n"
++		" --ttl=<int>\t\t\t\t\t; ttl/hl applied by --force-ttl, default is 64\n"
+ #endif
+ 		" --wsize=<window_size>[:<scale_factor>]\t\t; set window size. 0 = do not modify. OBSOLETE !\n"
+ 		" --wssize=<window_size>[:<scale_factor>]\t; set window size for server. 0 = do not modify. default scale_factor = 0.\n"
+@@ -714,6 +734,7 @@
+ 	params.hostlist_auto_fail_threshold = HOSTLIST_AUTO_FAIL_THRESHOLD_DEFAULT;
+ 	params.hostlist_auto_fail_time = HOSTLIST_AUTO_FAIL_TIME_DEFAULT;
+ 	params.hostlist_auto_retrans_threshold = HOSTLIST_AUTO_RETRANS_THRESHOLD_DEFAULT;
++	params.ttl = 64;
+ 
+ 	LIST_INIT(&params.hostlist_files);
+ 	LIST_INIT(&params.hostlist_exclude_files);
+@@ -788,6 +809,8 @@
+ #ifdef __linux__
+ 		{"bind-fix4",no_argument,0,0},		// optidx=47
+ 		{"bind-fix6",no_argument,0,0},		// optidx=48
++		{"force-ttl",no_argument,0,0},		// optidx=49
++		{"ttl",required_argument,0,0},		// optidx=50
+ #endif
+ 		{NULL,0,NULL,0}
+ 	};
+@@ -1210,6 +1233,17 @@
+ 		case 48: /* bind-fix6 */
+ 			params.bind_fix6 = true;
+ 			break;
++		case 49: /* force_ttl */
++			params.force_ttl = true;
++			break;
++		case 50: /* ttl */
++			params.ttl = (uint8_t)atoi(optarg);
++			if (params.ttl < 1 || params.ttl > 255)
++			{
++				fprintf(stderr, "packet ttl is not valid\n");
++				exit_clean(1);
++			}
++			break;
+ #endif
+ 		}
+ 	}
+diff -ruN org/zapret/nfq/params.h patch/zapret/nfq/params.h
+--- org/zapret/nfq/params.h	2024-03-06 20:49:39.922176361 -0600
++++ patch/zapret/nfq/params.h	2024-03-06 11:22:57.693298018 -0600
+@@ -43,6 +43,8 @@
+ #elif defined(BSD)
+ 	uint16_t port; // divert port
+ #endif
++	char force_ttl;
++	uint8_t ttl;
+ 	char bind_fix4,bind_fix6;
+ 	bool hostcase, hostnospace, domcase;
+ 	char hostspell[4];

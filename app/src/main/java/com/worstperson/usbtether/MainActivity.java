@@ -153,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
         TextView net_textview = findViewById(R.id.net_textview);
         Switch service_switch = findViewById(R.id.service_switch);
         Switch dnsmasq_switch = findViewById(R.id.dnsmasq_switch);
-        Spinner ttl_spinner = findViewById(R.id.ttl_spinner);
+        Switch ttl_switch = findViewById(R.id.ttl_switch);
         Switch dpi_switch = findViewById(R.id.dpi_switch);
         Switch cell_switch = findViewById(R.id.cell_switch);
         Spinner vpn_spinner = findViewById(R.id.vpn_spinner);
@@ -171,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
         boolean dnsmasq = sharedPref.getBoolean("dnsmasq", true);
-        String setTTL = sharedPref.getString("setTTL", "None");
+        boolean mangleTTL = sharedPref.getBoolean("mangleTTL", true);
         String ipv6TYPE = sharedPref.getString("ipv6TYPE", "None");
         boolean ipv6Default = sharedPref.getBoolean("ipv6Default", false);
         boolean dpiCircumvention = sharedPref.getBoolean("dpiCircumvention", false);
@@ -183,7 +183,6 @@ public class MainActivity extends AppCompatActivity {
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
         assert upstreamInterface != null;
-        assert setTTL != null;
         assert ipv6TYPE != null;
         assert ipv4Addr != null;
         assert wireguardProfile != null;
@@ -197,10 +196,9 @@ public class MainActivity extends AppCompatActivity {
         boolean hasMASQUERADE = Script.hasMASQUERADE;
 
         SharedPreferences.Editor edit = sharedPref.edit();
-        if ((setTTL.equals("TTL/HL") && !hasTTL) ||
-                (setTTL.equals("NFQUEUE") && !hasNFQUEUE)) {
-            setTTL = "None";
-            edit.putString("setTTL", setTTL);
+        if (mangleTTL && !hasTTL && !hasNFQUEUE) {
+            mangleTTL = false;
+            edit.putBoolean("mangleTTL", mangleTTL);
         }
         if ((ipv6TYPE.equals("TPROXY") && !hasTPROXY) ||
                 (ipv6TYPE.equals("SNAT") && (!hasTable || !hasSNAT)) ||
@@ -212,6 +210,7 @@ public class MainActivity extends AppCompatActivity {
 
         service_switch.setChecked(serviceEnabled);
         dnsmasq_switch.setChecked(dnsmasq);
+        ttl_switch.setChecked(mangleTTL);
         dpi_switch.setChecked(dpiCircumvention);
         cell_switch.setChecked(cellularWatchdog);
 
@@ -220,23 +219,6 @@ public class MainActivity extends AppCompatActivity {
         bandwidth_text.setText(clientBandwidth);
 
         setInterfaceSpinner(upstreamInterface, interface_spinner);
-
-        ArrayList<String> arraySpinner1 = new ArrayList<>();
-        arraySpinner1.add("None");
-        if (hasTTL) {
-            arraySpinner1.add("TTL/HL");
-        }
-        if (hasNFQUEUE) {
-            arraySpinner1.add("NFQUEUE");
-        }
-        ArrayAdapter<String> adapter1 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner1);
-        adapter1.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        ttl_spinner.setAdapter(adapter1);
-        int position = arraySpinner1.indexOf(setTTL);
-        if (position < 0) {
-            position = 0;
-        }
-        ttl_spinner.setSelection(position);
 
         ArrayList<String> arraySpinner2 = new ArrayList<>();
         arraySpinner2.add("None");
@@ -254,7 +236,7 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter2 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner2);
         adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         nat_spinner.setAdapter(adapter2);
-        position = arraySpinner2.indexOf(ipv6TYPE);
+        int position = arraySpinner2.indexOf(ipv6TYPE);
         if (position < 0) {
             position = 0;
         }
@@ -281,18 +263,23 @@ public class MainActivity extends AppCompatActivity {
 
         if (serviceEnabled) {
             dnsmasq_switch.setEnabled(false);
+            ttl_switch.setEnabled(false);
             dpi_switch.setEnabled(false);
             cell_switch.setEnabled(false);
             ipv4_text.setEnabled(false);
             wg_text.setEnabled(false);
             bandwidth_text.setEnabled(false);
             interface_spinner.setEnabled(false);
-            ttl_spinner.setEnabled(false);
             nat_spinner.setEnabled(false);
             prefix_spinner.setEnabled(false);
             vpn_spinner.setEnabled(false);
-        } else if (autostartVPN > 0) {
-            interface_spinner.setEnabled(false);
+        } else {
+            if (!hasTTL && !hasNFQUEUE) {
+                ttl_switch.setEnabled(false);
+            }
+            if (autostartVPN > 0) {
+                interface_spinner.setEnabled(false);
+            }
         }
 
         if (ipv6TYPE.equals("None")) {
@@ -307,6 +294,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 dnsmasq_switch.setEnabled(!isChecked);
+                if (hasTTL || hasNFQUEUE) {
+                    ttl_switch.setEnabled(!isChecked);
+                }
                 dpi_switch.setEnabled(!isChecked);
                 cell_switch.setEnabled(!isChecked);
                 ipv4_text.setEnabled(!isChecked);
@@ -315,7 +305,6 @@ public class MainActivity extends AppCompatActivity {
                 if (autostartVPN == 0) {
                     interface_spinner.setEnabled(!isChecked);
                 }
-                ttl_spinner.setEnabled(!isChecked);
                 nat_spinner.setEnabled(!isChecked);
                 prefix_spinner.setEnabled(!isChecked);
                 vpn_spinner.setEnabled(!isChecked);
@@ -344,6 +333,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        ttl_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putBoolean("mangleTTL", isChecked);
+                edit.apply();
+            }
+        });
+
         dpi_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -359,19 +357,6 @@ public class MainActivity extends AppCompatActivity {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("cellularWatchdog", isChecked);
                 edit.apply();
-            }
-        });
-
-        ttl_spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
-                Object item = adapterView.getItemAtPosition(position);
-                SharedPreferences.Editor edit = sharedPref.edit();
-                edit.putString("setTTL", item.toString());
-                edit.apply();
-            }
-            @Override
-            public void onNothingSelected(AdapterView<?> adapterView) {
             }
         });
 

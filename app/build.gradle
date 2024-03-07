@@ -3,12 +3,13 @@ plugins {
 }
 
 android {
-    compileSdkVersion 30
-    buildToolsVersion "33.0.1"
+    defaultConfig {
+        compileSdk 30
+    }
 
     defaultConfig {
         applicationId "com.worstperson.usbtether"
-        minSdkVersion 23
+        minSdkVersion 24
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 30
         versionCode 1
@@ -40,7 +41,7 @@ repositories {
 }
 
 dependencies {
-    def libsuVersion = '5.0.4'
+    def libsuVersion = '5.2.2'
 
     implementation "com.github.topjohnwu.libsu:core:${libsuVersion}"
     implementation 'androidx.core:core:1.6.0'
