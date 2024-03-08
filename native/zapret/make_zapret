@@ -1,24 +1,44 @@
 #!/bin/sh
 
+options=("arm7a" "aarch64")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "arm7a")
+            export HOST=armv7a-linux-androideabi
+            export SYSROOT=$PWD/sysroot_arm7a
+            break
+            ;;
+        "aarch64")
+            export HOST=aarch64-linux-android
+            export SYSROOT=$PWD/sysroot_aarch64
+            break
+            ;;
+        *) echo "invalid option $REPLY";;
+    esac
+done
+
 export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
 export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar
 export AS=$TOOLCHAIN/bin/llvm-as
-export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi24-clang
-export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi24-clang++
+export CC=$TOOLCHAIN/bin/${HOST}24-clang
+export CXX=$TOOLCHAIN/bin/${HOST}24-clang++
 export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
 
-rm -R sysroot_arm7a
+rm -R $SYSROOT
+export CFLAGS+=''
+export CPPFLAGS+=' -I'${SYSROOT}'/include/'
+export LDFLAGS+=' -L'${SYSROOT}'/lib/'
 
 rm -R libmnl-1.0.5
 wget -nc https://www.netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2
 tar -xf libmnl-1.0.5.tar.bz2
 cd libmnl-1.0.5
-./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
-make clean
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
 make
 make install
 cd ..
@@ -27,8 +47,7 @@ rm -R libnfnetlink-1.0.2
 wget -nc https://www.netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.2.tar.bz2
 tar -xf libnfnetlink-1.0.2.tar.bz2
 cd libnfnetlink-1.0.2
-./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
-make clean
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
 make
 make install
 cd ..
@@ -38,41 +57,37 @@ wget -nc https://www.netfilter.org/projects/libnetfilter_queue/files/libnetfilte
 tar -xf libnetfilter_queue-1.0.5.tar.bz2
 patch -p1 < libnetfilter_queue-1.0.5.patch
 cd libnetfilter_queue-1.0.5
-export CFLAGS+=' -fPIC -I../../sysroot_arm7a/include'
-export LDFLAGS+=' -fPIC'
-export PKG_CONFIG_PATH='../sysroot_arm7a/lib/pkgconfig'
-./configure --prefix=$PWD/../sysroot_arm7a --host=armv7a-linux-android --enable-shared=no
-make clean
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
 make
 make install
-mkdir ../sysroot_arm7a/include/src
-cp config.h ../sysroot_arm7a/include/src/
-cp src/internal.h ../sysroot_arm7a/include/src/
+mkdir $SYSROOT/include/src
+cp config.h $SYSROOT/include/src/
+cp src/internal.h $SYSROOT/include/src/
 cd ..
-export CFLAGS=''
-export LDFLAGS=''
+
+export CHOST=aarch64-linux-android
+export CFLAGS+=' -fPIC'
 
 rm -R zlib-1.3.1
 wget -nc https://www.zlib.net/zlib-1.3.1.tar.gz
 tar -xf zlib-1.3.1.tar.gz
 cd zlib-1.3.1
-export CHOST=armv7a-linux-android
-./configure --prefix=$PWD/../sysroot_arm7a --static
-make clean
+./configure --prefix=$SYSROOT --static
 make
 make install
 cd ..
+
+export LDFLAGS+=' -I'${SYSROOT}'/include/'
 
 git clone --depth 1 https://github.com/bol-van/zapret.git
 patch -N -p1 < nfqws.patch
 cd zapret/nfq/
 make clean
-export LDFLAGS='-I../../sysroot_arm7a/include/ -L../../sysroot_arm7a/lib/'
 make
 $STRIP nfqws
-mv nfqws ../../nfqws_arm7a
-cd ../tpws
+mv nfqws ../../nfqws_$HOST
+cd ../tpws/
 make clean
 make
 $STRIP tpws
-mv tpws ../../tpws_arm7a
+mv tpws ../../tpws_$HOST

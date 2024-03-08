@@ -1,12 +1,28 @@
 #!/bin/sh
 
+options=("arm7a" "aarch64")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "arm7a")
+            export HOST=armv7a-linux-androideabi
+            break
+            ;;
+        "aarch64")
+            export HOST=aarch64-linux-android
+            break
+            ;;
+        *) echo "invalid option $REPLY";;
+    esac
+done
+
 export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
 export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar
 export AS=$TOOLCHAIN/bin/llvm-as
-export CC=$TOOLCHAIN/bin/aarch64-linux-android24-clang
-export CXX=$TOOLCHAIN/bin/aarch64-linux-android24-clang++
+export CC=$TOOLCHAIN/bin/${HOST}24-clang
+export CXX=$TOOLCHAIN/bin/${HOST}24-clang++
 export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
@@ -16,7 +32,6 @@ wget -nc https://thekelleys.org.uk/dnsmasq/dnsmasq-2.90.tar.gz
 tar -xf dnsmasq-2.90.tar.gz
 patch -N -p1 < dnsmasq.patch
 cd dnsmasq-2.90
-make clean
 make
 $STRIP src/dnsmasq
-mv src/dnsmasq ../dnsmasq_aarch64
+mv src/dnsmasq ../dnsmasq_$HOST

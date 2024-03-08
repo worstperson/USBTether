@@ -1,0 +1,83 @@
+#!/bin/sh
+
+options=("arm7a" "aarch64")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "arm7a")
+            export HOST=armv7a-linux-androideabi
+            export SYSROOT=$PWD/sysroot_arm7a
+            break
+            ;;
+        "aarch64")
+            export HOST=aarch64-linux-android
+            export SYSROOT=$PWD/sysroot_aarch64
+            break
+            ;;
+        *) echo "invalid option $REPLY";;
+    esac
+done
+
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export HOST_TAG=linux-x86_64
+export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
+export AR=$TOOLCHAIN/bin/llvm-ar
+export AS=$TOOLCHAIN/bin/llvm-as
+export CC=$TOOLCHAIN/bin/${HOST}24-clang
+export CXX=$TOOLCHAIN/bin/${HOST}24-clang++
+export LD=$TOOLCHAIN/bin/ld
+export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+rm -R $SYSROOT
+export CFLAGS+=''
+export CPPFLAGS+=' -I'${SYSROOT}'/include/'
+export LDFLAGS+=' -L'${SYSROOT}'/lib/'
+
+rm -R libiconv-1.17
+wget -nc https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz
+tar -xf libiconv-1.17.tar.gz
+cd libiconv-1.17
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
+make
+make install
+cd ..
+
+rm -R libunistring-1.2
+wget -nc https://ftp.gnu.org/gnu/libunistring/libunistring-1.2.tar.gz
+tar -xf libunistring-1.2.tar.gz
+cd libunistring-1.2
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
+make
+make install
+cd ..
+
+rm -R libidn2-2.3.7
+wget -nc https://ftp.gnu.org/gnu/libidn/libidn2-2.3.7.tar.gz
+tar -xf libidn2-2.3.7.tar.gz
+cd libidn2-2.3.7
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
+make
+make install
+cd ..
+
+rm -R libpsl-0.21.5
+wget -nc https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz
+tar -xf libpsl-0.21.5.tar.gz
+cd libpsl-0.21.5
+./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
+make
+make install
+cd ..
+
+rm -R curl-8.6.0
+wget -nc https://curl.se/download/curl-8.6.0.tar.gz
+tar -xf curl-8.6.0.tar.gz
+cd curl-8.6.0
+export LDFLAGS+=' -l:libiconv.a -l:libunistring.a -l:libidn2.a -l:libpsl.a'
+make clean
+./configure --host=$HOST --prefix=$SYSROOT --with-pic --disable-shared --without-ssl
+make
+make install-strip
+cd ..
+mv ${SYSROOT}/bin/curl curl_${HOST}

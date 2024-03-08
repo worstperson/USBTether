@@ -263,11 +263,9 @@ public class Script {
             counter = prefix;
         }
 
-        // Add conntrack helpers
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            iptables(isIPv6, "raw", "A", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 21 -j CT --helper ftp");
-            iptables(isIPv6, "raw", "A", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 1723 -j CT --helper pptp");
-        }
+        // Add conntrack helpers - android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N
+        iptables(isIPv6, "raw", "A", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 21 -j CT --helper ftp");
+        iptables(isIPv6, "raw", "A", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 1723 -j CT --helper pptp");
 
         // Enable MSS Clamping
         iptables(isIPv6, "mangle", "A", prefix + "_mangle_FORWARD -p tcp -m tcp --tcp-flags SYN SYN -j TCPMSS --clamp-mss-to-pmtu");
@@ -301,10 +299,8 @@ public class Script {
             counter = prefix;
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            iptables(isIPv6, "raw", "D", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 21 -j CT --helper ftp");
-            iptables(isIPv6, "raw", "D", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 1723 -j CT --helper pptp");
-        }
+        iptables(isIPv6, "raw", "D", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 21 -j CT --helper ftp");
+        iptables(isIPv6, "raw", "D", prefix + "_raw_PREROUTING -i " + tetherInterface + " -p tcp -m tcp --dport 1723 -j CT --helper pptp");
 
         iptables(isIPv6, "filter", "D", prefix + "_FORWARD -i " + tetherInterface + " -o " + upstreamInterface + " -g " + counter + "_counters");
         iptables(isIPv6, "filter", "D", prefix + "_FORWARD -i " + tetherInterface + " -o " + upstreamInterface + " -m state --state INVALID -j DROP");
