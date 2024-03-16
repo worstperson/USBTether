@@ -55,8 +55,7 @@ public class Script {
     static boolean hasNFQUEUE = shellCommand("iptables " + hasWait + "-j NFQUEUE --help | grep \"NFQUEUE\" > /dev/null");
     static boolean hasTable = shellCommand("ip6tables " + hasWait + "--table nat --list > /dev/null");
 
-    // FIXME: inexplicable slowdown in cellular check after a VPN restore, does not happen with ping
-    static boolean hasCURL = shellCommand("command -v curl > /dev/null");
+    //static boolean hasCURL = shellCommand("command -v curl > /dev/null");
 
     static boolean isUSBConfigured() {
         return Shell.cmd("[ \"$(cat /sys/class/android_usb/android0/state)\" = \"CONFIGURED\" ]").exec().isSuccess();
@@ -151,7 +150,7 @@ public class Script {
             shellCommand(libDIR + "/libusbgadget.so " + gagdetFunctions);
         } else {
             // LegacyHal can impl ncm, but we have no way to check
-            Log.i("USBTether", "Configuring " + functionName + " via LegacyHal");
+            Log.i("USBTether", "Configuring rndis via LegacyHal");
             shellCommand("setprop sys.usb.config none");
             if (adbEnabled) {
                 shellCommand("setprop sys.usb.config rndis,adb");
@@ -391,6 +390,7 @@ public class Script {
                     iptables(true, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv6Interface + " -j HL --hl-set 64");
                 }
             }
+            // TODO use connbytes where available to avoid desync on subsequent packets in a connection
             if (hasNFQUEUE && ((mangleTTL && !hasTTL) || dpiCircumvention)) {
                 iptables(false, "mangle", "A", "FORWARD -i " + tetherInterface + " -o " + ipv4Interface + " -j NFQUEUE --queue-num 6465");
                 if (ipv6TYPE.equals("MASQUERADE") || ipv6TYPE.equals("SNAT")) {
@@ -505,7 +505,7 @@ public class Script {
         }
         if (hasNFQUEUE && ((mangleTTL && !hasTTL) || dpiCircumvention)) {
             if (!shellCommand("[ -f " + appData + "/nfqws.pid -a -d /proc/$(cat " + appData + "/nfqws.pid) ]")) {
-                Log.w("USBTether", "No nfqttl process, restarting");
+                Log.w("USBTether", "No nfqws process, restarting");
                 String optTTL = "";
                 if (mangleTTL && !hasTTL) {
                     optTTL = "--force-ttl ";
@@ -550,7 +550,9 @@ public class Script {
         iptables(true, "nat", "A", prefix + "_nat_POSTROUTING -o " + tetherInterface + " -j SNAT --to " + newAddr);
     }
 
-    static boolean testConnection(String upstreamInterface, boolean isIPv6) {
+    // FIXME these tests can hang on name resolution, fix this and supply binaries if needed
+    //       simple ping tests are not super useful due to false positives
+    /*static boolean testConnection(String upstreamInterface, boolean isIPv6) {
         String protocol = isIPv6 ? "IPv6" : "IPv4";
         if (hasCURL) {
             String testSite = "http://connectivitycheck.gstatic.com/generate_204";
@@ -567,6 +569,18 @@ public class Script {
                 Log.i("USBTether", upstreamInterface + " " + protocol + " is online");
                 return true;
             }
+        }
+        Log.w("USBTether", upstreamInterface + " " + protocol + " is offline");
+        return false;
+    }*/
+
+    static boolean testConnection(String upstreamInterface, boolean isIPv6) {
+        String protocol = isIPv6 ? "IPv6" : "IPv4";
+        String command = isIPv6 ? "ping6" : "ping";
+        if (Shell.cmd(command + " -c 1 -w 3 -I " + upstreamInterface + " " + (isIPv6 ? "2001:4860:4860::8888" : "8.8.8.8")).exec().isSuccess()
+                || Shell.cmd(command + " -c 1 -w 3 -I " + upstreamInterface + " " + (isIPv6 ? "2606:4700:4700::1111" : "1.1.1.1")).exec().isSuccess()) {
+            Log.i("USBTether", upstreamInterface + " " + protocol + " is online");
+            return true;
         }
         Log.w("USBTether", upstreamInterface + " " + protocol + " is offline");
         return false;
