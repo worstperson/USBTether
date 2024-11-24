@@ -41,7 +41,7 @@ repositories {
 }
 
 dependencies {
-    def libsuVersion = '5.2.2'
+    def libsuVersion = '6.0.0'
 
     implementation "com.github.topjohnwu.libsu:core:${libsuVersion}"
     implementation 'androidx.core:core:1.6.0'

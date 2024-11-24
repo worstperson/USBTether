@@ -48,12 +48,14 @@ public class Script {
     }
     
     static String hasWait = testWait();
-    static boolean hasMASQUERADE = shellCommand("ip6tables " + hasWait + "-j MASQUERADE --help | grep \"MASQUERADE\" > /dev/null");
-    static boolean hasSNAT = shellCommand("ip6tables " + hasWait + "-j SNAT --help | grep \"SNAT\" > /dev/null");
-    static boolean hasTPROXY = shellCommand("ip6tables " + hasWait + "-j TPROXY --help | grep \"TPROXY\" > /dev/null");
-    static boolean hasTTL = shellCommand("iptables " + hasWait + "-j TTL --help | grep \"TTL\" > /dev/null");
-    static boolean hasNFQUEUE = shellCommand("iptables " + hasWait + "-j NFQUEUE --help | grep \"NFQUEUE\" > /dev/null");
     static boolean hasTable = shellCommand("ip6tables " + hasWait + "--table nat --list > /dev/null");
+
+    // iptables can lie, inject test rules to verify the the modules are actually available
+    static boolean hasNFQUEUE = shellCommand("iptables " + hasWait + "-t mangle -A FORWARD -j NFQUEUE --queue-num 0") && shellCommand("iptables " + hasWait + "-t mangle -D FORWARD -j NFQUEUE --queue-num 0");
+    static boolean hasTPROXY = shellCommand("ip6tables " + hasWait + "-t mangle -A PREROUTING -p tcp -j TPROXY --on-ip :: --on-port 0 --tproxy-mark 0") && shellCommand("ip6tables " + hasWait + "-t mangle -D PREROUTING -p tcp -j TPROXY --on-ip :: --on-port 0 --tproxy-mark 0");
+    static boolean hasTTL = shellCommand("iptables " + hasWait + "-t mangle -I FORWARD -j TTL --ttl-set 64") && shellCommand("iptables " + hasWait + "-t mangle -D FORWARD -j TTL --ttl-set 64");
+    static boolean hasSNAT = hasTable && shellCommand("ip6tables " + hasWait + "-t nat -I POSTROUTING -j SNAT --to [::]") && shellCommand("ip6tables " + hasWait + "-t nat -D POSTROUTING -j SNAT --to [::]");
+    static boolean hasMASQUERADE = hasTable && shellCommand("ip6tables " + hasWait + "-t nat -A POSTROUTING -j MASQUERADE") && shellCommand("ip6tables " + hasWait + "-t nat -D POSTROUTING -j MASQUERADE");
 
     //static boolean hasCURL = shellCommand("command -v curl > /dev/null");
 
@@ -151,6 +153,7 @@ public class Script {
         } else {
             // LegacyHal can impl ncm, but we have no way to check
             Log.i("USBTether", "Configuring rndis via LegacyHal");
+            // Some broken HAL impls need none to be set or the gadget will not reset
             shellCommand("setprop sys.usb.config none");
             if (adbEnabled) {
                 shellCommand("setprop sys.usb.config rndis,adb");
@@ -181,7 +184,6 @@ public class Script {
             shellCommand(libDIR + "/libusbgadget.so " + gagdetFunctions);
         } else {
             Log.i("USBTether", "Configuring default USB state via LegacyHal");
-            // Some broken HAL impls need none to be set or the gadget will not reset
             shellCommand("setprop sys.usb.config none");
             if (adbEnabled) {
                 shellCommand("setprop sys.usb.config adb");
