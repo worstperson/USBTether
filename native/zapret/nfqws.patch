@@ -1,93 +1,73 @@
-diff -ruN org/zapret/nfq/nfqws.c patch/zapret/nfq/nfqws.c
---- org/zapret/nfq/nfqws.c	2024-03-06 20:49:39.922176361 -0600
-+++ patch/zapret/nfq/nfqws.c	2024-03-06 20:51:04.598840234 -0600
-@@ -31,6 +31,7 @@
- 
- #ifdef __linux__
- #include <libnetfilter_queue/libnetfilter_queue.h>
-+#include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
- #define NF_DROP 0
- #define NF_ACCEPT 1
- #endif
-@@ -88,6 +89,7 @@
- static packet_process_result processPacketData(uint32_t *mark, const char *ifout, uint8_t *data_pkt, size_t len_pkt)
- {
- 	struct ip *ip = NULL;
-+	struct iphdr *iphdr = NULL;
- 	struct ip6_hdr *ip6hdr = NULL;
- 	struct tcphdr *tcphdr = NULL;
- 	struct udphdr *udphdr = NULL;
-@@ -107,6 +109,11 @@
- 	if (proto_check_ipv4(data, len))
+diff -ruN org/zapret/nfq/desync.c patch/zapret/nfq/desync.c
+--- org/zapret/nfq/desync.c	2024-11-24 17:52:38.389942520 -0600
++++ patch/zapret/nfq/desync.c	2024-11-24 17:53:49.119550832 -0600
+@@ -2251,6 +2251,18 @@
+ 	if (!!dis.ip != !!dis.ip6)
  	{
- 		ip = (struct ip *) data;
+ 		packet_debug(replay, &dis);
 +		if (params.force_ttl)
 +		{
-+			iphdr = (struct iphdr *) data;
-+			iphdr->ttl = params.ttl;
++			if (dis.ip)
++			{
++				dis.ip->ip_ttl = params.ttl;
++				ip4_fix_checksum(dis.ip);
++			}
++			else
++			{
++				dis.ip6->ip6_ctlun.ip6_un1.ip6_un1_hlim = params.ttl;
++			}
 +		}
- 		proto = ip->ip_p;
- 		proto_skip_ipv4(&data, &len);
- 		if (params.debug)
-@@ -118,6 +125,10 @@
- 	else if (proto_check_ipv6(data, len))
- 	{
- 		ip6hdr = (struct ip6_hdr *) data;
-+		if (params.force_ttl)
-+		{
-+			ip6hdr->ip6_hlim = params.ttl;
-+		}
- 		proto_skip_ipv6(&data, &len, &proto, NULL);
- 		if (params.debug)
+ 		switch(dis.proto)
  		{
-@@ -185,6 +196,13 @@
- 		if (params.debug) printf("\n");
- 	}
- 
-+	if (params.force_ttl && res == pass) {
-+		if (iphdr) {
-+			nfq_ip_set_checksum(iphdr);
+ 			case IPPROTO_TCP:
+@@ -2269,6 +2281,10 @@
+ 				break;
+ 		}
+ 		*len_pkt = dis.len_pkt;
++		if (params.force_ttl && (verdict & VERDICT_MASK) == VERDICT_PASS)
++		{
++			verdict = VERDICT_MODIFY;
 +		}
-+		res = modify;
-+	}
-+
- 	return res;
+ 	}
+ 	return verdict;
  }
- 
-@@ -523,6 +541,8 @@
+diff -ruN org/zapret/nfq/nfqws.c patch/zapret/nfq/nfqws.c
+--- org/zapret/nfq/nfqws.c	2024-11-24 17:52:38.389942520 -0600
++++ patch/zapret/nfq/nfqws.c	2024-11-24 17:57:57.388161032 -0600
+@@ -1003,6 +1003,8 @@
  #ifdef __linux__
  		" --bind-fix4\t\t\t\t\t; apply outgoing interface selection fix for generated ipv4 packets\n"
  		" --bind-fix6\t\t\t\t\t; apply outgoing interface selection fix for generated ipv6 packets\n"
 +		" --force-ttl\t\t\t\t\t; overwrite the ttl/hl for traffic passing through nfqws\n"
 +		" --ttl=<int>\t\t\t\t\t; ttl/hl applied by --force-ttl, default is 64\n"
  #endif
- 		" --wsize=<window_size>[:<scale_factor>]\t\t; set window size. 0 = do not modify. OBSOLETE !\n"
- 		" --wssize=<window_size>[:<scale_factor>]\t; set window size for server. 0 = do not modify. default scale_factor = 0.\n"
-@@ -714,6 +734,7 @@
- 	params.hostlist_auto_fail_threshold = HOSTLIST_AUTO_FAIL_THRESHOLD_DEFAULT;
- 	params.hostlist_auto_fail_time = HOSTLIST_AUTO_FAIL_TIME_DEFAULT;
- 	params.hostlist_auto_retrans_threshold = HOSTLIST_AUTO_RETRANS_THRESHOLD_DEFAULT;
+ 		" --ctrack-timeouts=S:E:F[:U]\t\t\t; internal conntrack timeouts for TCP SYN, ESTABLISHED, FIN stages, UDP timeout. default %u:%u:%u:%u\n"
+ #ifdef __CYGWIN__
+@@ -1179,6 +1181,7 @@
+ 	params.ctrack_t_est = CTRACK_T_EST;
+ 	params.ctrack_t_fin = CTRACK_T_FIN;
+ 	params.ctrack_t_udp = CTRACK_T_UDP;
 +	params.ttl = 64;
- 
- 	LIST_INIT(&params.hostlist_files);
- 	LIST_INIT(&params.hostlist_exclude_files);
-@@ -788,6 +809,8 @@
+ 	
+ 	LIST_INIT(&params.hostlists);
+ 	LIST_INIT(&params.ipsets);
+@@ -1285,6 +1288,8 @@
  #ifdef __linux__
- 		{"bind-fix4",no_argument,0,0},		// optidx=47
- 		{"bind-fix6",no_argument,0,0},		// optidx=48
-+		{"force-ttl",no_argument,0,0},		// optidx=49
-+		{"ttl",required_argument,0,0},		// optidx=50
- #endif
- 		{NULL,0,NULL,0}
- 	};
-@@ -1210,6 +1233,17 @@
- 		case 48: /* bind-fix6 */
+ 		{"bind-fix4",no_argument,0,0},		// optidx=61
+ 		{"bind-fix6",no_argument,0,0},		// optidx=62
++		{"force-ttl",no_argument,0,0},		// optidx=63
++		{"ttl",required_argument,0,0},		// optidx=64
+ #elif defined(__CYGWIN__)
+ 		{"wf-iface",required_argument,0,0},	// optidx=61
+ 		{"wf-l3",required_argument,0,0},	// optidx=62
+@@ -1894,6 +1899,17 @@
+ 		case 62: /* bind-fix6 */
  			params.bind_fix6 = true;
  			break;
-+		case 49: /* force_ttl */
++		case 63: /* force_ttl */
 +			params.force_ttl = true;
 +			break;
-+		case 50: /* ttl */
++		case 64: /* ttl */
 +			params.ttl = (uint8_t)atoi(optarg);
 +			if (params.ttl < 1 || params.ttl > 255)
 +			{
@@ -95,18 +75,19 @@ diff -ruN org/zapret/nfq/nfqws.c patch/zapret/nfq/nfqws.c
 +				exit_clean(1);
 +			}
 +			break;
- #endif
- 		}
- 	}
+ #elif defined(__CYGWIN__)
+ 		case 61: /* wf-iface */
+ 			if (!sscanf(optarg,"%u.%u",&IfIdx,&SubIfIdx))
 diff -ruN org/zapret/nfq/params.h patch/zapret/nfq/params.h
---- org/zapret/nfq/params.h	2024-03-06 20:49:39.922176361 -0600
-+++ patch/zapret/nfq/params.h	2024-03-06 11:22:57.693298018 -0600
-@@ -43,6 +43,8 @@
- #elif defined(BSD)
- 	uint16_t port; // divert port
- #endif
+--- org/zapret/nfq/params.h	2024-11-24 17:52:38.389942520 -0600
++++ patch/zapret/nfq/params.h	2024-11-24 17:58:30.191309348 -0600
+@@ -142,6 +142,9 @@
+ 
+ 	unsigned int ctrack_t_syn, ctrack_t_est, ctrack_t_fin, ctrack_t_udp;
+ 	t_conntrack conntrack;
++
 +	char force_ttl;
 +	uint8_t ttl;
- 	char bind_fix4,bind_fix6;
- 	bool hostcase, hostnospace, domcase;
- 	char hostspell[4];
+ };
+ 
+ extern struct params_s params;

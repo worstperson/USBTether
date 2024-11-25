@@ -404,7 +404,7 @@ public class Script {
                 }
                 String optDPI = "";
                 if (dpiCircumvention) {
-                    optDPI = "--dpi-desync=split2 ";
+                    optDPI = "--dpi-desync-split-pos=midsld ";
                 }
                 shellCommand("rm " + appData + "/nfqws.pid");
                 shellCommand(libDIR + "/libnfqws.so " + optTTL + optDPI + "--qnum=6465 --pidfile=" + appData + "/nfqws.pid &");
@@ -514,7 +514,7 @@ public class Script {
                 }
                 String optDPI = "";
                 if (dpiCircumvention) {
-                    optDPI = "--dpi-desync=split2 ";
+                    optDPI = "--dpi-desync-split-pos=midsld ";
                 }
                 shellCommand("rm " + appData + "/nfqws.pid");
                 shellCommand(libDIR + "/libnfqws.so " + optTTL + optDPI + "--qnum=6465 --pidfile=" + appData + "/nfqws.pid &");

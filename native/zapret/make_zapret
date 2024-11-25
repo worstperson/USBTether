@@ -79,7 +79,7 @@ cd ..
 
 export LDFLAGS+=' -I'${SYSROOT}'/include/'
 
-git clone --depth 1 https://github.com/bol-van/zapret.git
+git clone --depth 1 --branch v69.2 https://github.com/bol-van/zapret.git
 patch -N -p1 < nfqws.patch
 cd zapret/nfq/
 make clean
@@ -88,6 +88,6 @@ $STRIP nfqws
 mv nfqws ../../nfqws_$HOST
 cd ../tpws/
 make clean
-make
+make android
 $STRIP tpws
 mv tpws ../../tpws_$HOST
