@@ -3,17 +3,19 @@ plugins {
 }
 
 android {
-    defaultConfig {
-        compileSdk 30
-    }
 
     defaultConfig {
         applicationId "com.worstperson.usbtether"
         minSdkVersion 24
-        //noinspection ExpiredTargetSdkVersion
-        targetSdkVersion 30
+        //noinspection EditedTargetSdkVersion,ExpiredTargetSdkVersion
+        targetSdkVersion 35
+        compileSdk 35
         versionCode 1
         versionName "0.1"
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -26,6 +28,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:-options"
+        }
+    }
+
 
     packagingOptions {
         jniLibs {
@@ -44,7 +53,7 @@ dependencies {
     def libsuVersion = '6.0.0'
 
     implementation "com.github.topjohnwu.libsu:core:${libsuVersion}"
-    implementation 'androidx.core:core:1.6.0'
-    implementation 'com.google.android.material:material:1.4.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
 }

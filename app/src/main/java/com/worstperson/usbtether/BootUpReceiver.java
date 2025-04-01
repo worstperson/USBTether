@@ -21,12 +21,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.util.Log;
 
 public class BootUpReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent.getAction().equals(Intent.ACTION_BOOT_COMPLETED)) {
+        String action;
+        if ((action = intent.getAction()) != null && action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+            Log.i("USBTether", "bootupreceiver onrecieve called...");
             SharedPreferences sharedPref = context.getSharedPreferences("Settings", Context.MODE_PRIVATE);
             boolean serviceEnabled = sharedPref.getBoolean("serviceEnabled", false);
             if (serviceEnabled && !ForegroundService.isStarted) {
@@ -36,6 +39,7 @@ public class BootUpReceiver extends BroadcastReceiver {
                 } else {
                     context.startService(it);
                 }
+                ForegroundService.isStarted = true;
             }
         }
     }

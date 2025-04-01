@@ -27,7 +27,6 @@ import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -92,7 +91,8 @@ public class MainActivity extends AppCompatActivity {
         Network activeNetwork;
         if (connectivityManager != null && (activeNetwork = connectivityManager.getActiveNetwork()) != null) {
             name = "";
-            NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
+            // FIXME - uses deprecated function getAllNetworks()
+            /*NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork);
             if (networkCapabilities != null && !networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
                 name = " (UNKNOWN)";
                 boolean usesCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
@@ -110,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-            }
+            }*/
             LinkProperties linkProperties = connectivityManager.getLinkProperties(activeNetwork);
             String interfaceName;
             if (linkProperties != null && (interfaceName = linkProperties.getInterfaceName()) != null) {
@@ -130,10 +130,19 @@ public class MainActivity extends AppCompatActivity {
 
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission("com.wireguard.android.permission.CONTROL_TUNNELS") != PackageManager.PERMISSION_GRANTED) {
-            String[] PERMISSIONS = {
-                    Manifest.permission.READ_EXTERNAL_STORAGE,
-                    "com.wireguard.android.permission.CONTROL_TUNNELS"
-            };
+            String[] PERMISSIONS;
+            if (Build.VERSION.SDK_INT >= 33) {
+                PERMISSIONS = new String[]{
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        "com.wireguard.android.permission.CONTROL_TUNNELS",
+                        Manifest.permission.POST_NOTIFICATIONS
+                };
+            } else {
+                PERMISSIONS = new String[]{
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        "com.wireguard.android.permission.CONTROL_TUNNELS"
+                };
+            }
             requestPermissions(PERMISSIONS, 1);
         }
 
@@ -182,12 +191,6 @@ public class MainActivity extends AppCompatActivity {
         String clientBandwidth = sharedPref.getString("clientBandwidth", "0");
         boolean cellularWatchdog = sharedPref.getBoolean("cellularWatchdog", false);
 
-        assert upstreamInterface != null;
-        assert ipv6TYPE != null;
-        assert ipv4Addr != null;
-        assert wireguardProfile != null;
-        assert clientBandwidth != null;
-
         boolean hasTTL = Script.hasTTL;
         boolean hasNFQUEUE = Script.hasNFQUEUE;
         boolean hasTPROXY = Script.hasTPROXY;
@@ -197,8 +200,8 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences.Editor edit = sharedPref.edit();
         if (mangleTTL && !hasTTL && !hasNFQUEUE) {
+            edit.putBoolean("mangleTTL", false);
             mangleTTL = false;
-            edit.putBoolean("mangleTTL", mangleTTL);
         }
         if ((ipv6TYPE.equals("TPROXY") && !hasTPROXY) ||
                 (ipv6TYPE.equals("SNAT") && (!hasTable || !hasSNAT)) ||
@@ -254,7 +257,6 @@ public class MainActivity extends AppCompatActivity {
         arraySpinner4.add("disabled");
         arraySpinner4.add("WireGuard");
         arraySpinner4.add("WireGuard Kernel Mode");
-        arraySpinner4.add("Google One VPN");
         arraySpinner4.add("Cloudflare 1.1.1.1 Warp");
         ArrayAdapter<String> adapter4 = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, arraySpinner4);
         adapter4.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -318,6 +320,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         MainActivity.this.startService(it);
                     }
+                    ForegroundService.isStarted = true;
                 } else {
                     MainActivity.this.stopService(it);
                 }
@@ -397,7 +400,6 @@ public class MainActivity extends AppCompatActivity {
                 String upstreamInterface = "Auto";
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 String wireguardProfile = sharedPref.getString("wireguardProfile", "wgcf-profile");
-                assert wireguardProfile != null;
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putInt("autostartVPN", position);
                 switch (position) {
@@ -488,6 +490,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 startService(it);
             }
+            ForegroundService.isStarted = true;
         }
     }
 
@@ -504,8 +507,6 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
         String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
-        assert upstreamInterface != null;
-        assert ipv4Addr != null;
 
         setInterfaceSpinner(upstreamInterface, interface_spinner);
         ipv4_text.setText(ipv4Addr);

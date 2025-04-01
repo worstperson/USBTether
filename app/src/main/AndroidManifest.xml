@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -8,6 +9,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -15,8 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.USBTether"
-        android:requestLegacyExternalStorage="true"
-        android:extractNativeLibs="true">
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -28,8 +29,9 @@
         <service
             android:name=".ForegroundService"
             android:enabled="true"
-            android:exported="false">
-            <intent-filter >
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_STATE" />
                 <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
             </intent-filter>

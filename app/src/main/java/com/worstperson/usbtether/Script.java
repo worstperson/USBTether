@@ -20,11 +20,14 @@ import android.os.Build;
 import android.util.Log;
 import com.topjohnwu.superuser.Shell;
 
+import java.util.List;
+
 public class Script {
 
     static {
         Shell.enableVerboseLogging = BuildConfig.DEBUG;
         Shell.setDefaultBuilder(Shell.Builder.create()
+                // FIXME - clearing this deprecated flag breaks 'svc usb getGadgetHalVersion' check
                 .setFlags(Shell.FLAG_REDIRECT_STDERR)
                 .setTimeout(10));
     }
@@ -41,7 +44,7 @@ public class Script {
         String cmd = "";
         if (shellCommand("iptables -w 0 --help > /dev/null")) {
             cmd = "-w 2 ";
-        } else if (shellCommand("iptables -w --help > /dev/null")) { // Early versions do not have the timeout
+        } else if (shellCommand("iptables -w --help > /dev/null")) { // Some versions do not have the timeout
             cmd = "-w ";
         }
         return cmd;
@@ -118,10 +121,13 @@ public class Script {
         if (useGadget && Build.VERSION.SDK_INT >= 31) {
             Shell.Result shell = Shell.cmd("svc usb getGadgetHalVersion").exec();
             if (shell.isSuccess()) {
-                String version = shell.getOut().get(0);
-                // State should never be "unknown", but we know it's not LegacyHal, so just ignore it
-                if (!(version.equals("unknown") || version.equals("V1_0") || version.equals("V1_1"))) {
-                    hasNCM = true;
+                List<String> output = shell.getOut();
+                if (!output.isEmpty()) {
+                    String version = output.get(0);
+                    // State should never be "unknown", but we know it's not LegacyHal, so just ignore it
+                    if (!(version.equals("unknown") || version.equals("V1_0") || version.equals("V1_1"))) {
+                        hasNCM = true;
+                    }
                 }
             }
         }
@@ -229,6 +235,13 @@ public class Script {
                 && shellCommand("ip -6 rule add pref 500 from all iif lo oif " + tetherInterface + " uidrange 0-0 lookup local_network")
                 && shellCommand("ip -6 rule add pref 510 from all iif lo oif " + tetherInterface + " lookup local_network")
                 && shellCommand("ip -6 rule add pref 540 from all iif " + tetherInterface + " lookup " + ipv6Interface);
+    }
+
+    static boolean checkRules(String ipv4Interface, String ipv6Interface) {
+        if (!shellCommand("ip rule list pref 540 | grep " + ipv4Interface + " > /dev/null") || !shellCommand("ip -6 rule list pref 540 | grep " + ipv6Interface + " > /dev/null")) {
+            return true;
+        }
+        return false;
     }
 
     static void unconfigureRules() {
@@ -574,18 +587,6 @@ public class Script {
         }
         Log.w("USBTether", upstreamInterface + " " + protocol + " is offline");
         return false;
-    }
-
-    static void startGoogleOneVPN() {
-        Log.w("USBTether", "Starting Google One VPN");
-        shellCommand("input keyevent KEYCODE_WAKEUP");
-        shellCommand("am start -W com.google.android.apps.subscriptions.red/com.google.android.apps.subscriptions.red.main.MainActivity");
-        shellCommand("am startservice com.google.android.apps.subscriptions.red/com.google.android.libraries.privacy.ppn.PpnVpnService");
-    }
-
-    static void stopGoogleOneVPN() {
-        Log.w("USBTether", "Stopping Google One VPN");
-        shellCommand("am force-stop com.google.android.apps.subscriptions.red");
     }
 
     // FIXME - this still has trouble launching on failure, even with no lockscreen
