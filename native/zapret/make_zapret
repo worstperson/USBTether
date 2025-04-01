@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 options=("arm7a" "aarch64")
 select opt in "${options[@]}"
@@ -18,7 +18,7 @@ do
     esac
 done
 
-export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26d
 export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar
@@ -57,6 +57,7 @@ wget -nc https://www.netfilter.org/projects/libnetfilter_queue/files/libnetfilte
 tar -xf libnetfilter_queue-1.0.5.tar.bz2
 patch -p1 < libnetfilter_queue-1.0.5.patch
 cd libnetfilter_queue-1.0.5
+export PKG_CONFIG_PATH=${SYSROOT}'/lib/pkgconfig/'
 ./configure --prefix=$SYSROOT --host=$HOST --with-pic --enable-shared=no
 make
 make install
@@ -79,7 +80,7 @@ cd ..
 
 export LDFLAGS+=' -I'${SYSROOT}'/include/'
 
-git clone --depth 1 --branch v69.2 https://github.com/bol-van/zapret.git
+git clone --depth 1 --branch v70.5 https://github.com/bol-van/zapret.git
 patch -N -p1 < nfqws.patch
 cd zapret/nfq/
 make clean

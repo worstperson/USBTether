@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 options=("arm7a" "aarch64")
 select opt in "${options[@]}"
@@ -18,7 +18,7 @@ do
     esac
 done
 
-export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26d
 export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar

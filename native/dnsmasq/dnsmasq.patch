@@ -1,6 +1,6 @@
-diff -ruN org/dnsmasq-2.90/Makefile patch/dnsmasq-2.90/Makefile
---- org/dnsmasq-2.90/Makefile	2024-02-13 07:49:15.000000000 -0600
-+++ patch/dnsmasq-2.90/Makefile	2024-03-08 02:15:32.309081848 -0600
+diff -ruN org/dnsmasq-2.91/Makefile patch/dnsmasq-2.91/Makefile
+--- org/dnsmasq-2.91/Makefile	2025-03-14 10:09:35.000000000 -0500
++++ patch/dnsmasq-2.91/Makefile	2025-03-31 23:52:40.927904166 -0500
 @@ -24,8 +24,8 @@
  LOCALEDIR     = $(PREFIX)/share/locale
  BUILDDIR      = $(SRC)
@@ -12,9 +12,9 @@ diff -ruN org/dnsmasq-2.90/Makefile patch/dnsmasq-2.90/Makefile
  COPTS         = 
  RPM_OPT_FLAGS = 
  LIBS          = 
-diff -ruN org/dnsmasq-2.90/src/dhcp.c patch/dnsmasq-2.90/src/dhcp.c
---- org/dnsmasq-2.90/src/dhcp.c	2024-02-13 07:49:15.000000000 -0600
-+++ patch/dnsmasq-2.90/src/dhcp.c	2024-03-08 02:09:53.155759631 -0600
+diff -ruN org/dnsmasq-2.91/src/dhcp.c patch/dnsmasq-2.91/src/dhcp.c
+--- org/dnsmasq-2.91/src/dhcp.c	2025-03-14 10:09:35.000000000 -0500
++++ patch/dnsmasq-2.91/src/dhcp.c	2025-03-31 23:53:49.272491755 -0500
 @@ -16,6 +16,10 @@
  
  #include "dnsmasq.h"
@@ -26,14 +26,16 @@ diff -ruN org/dnsmasq-2.90/src/dhcp.c patch/dnsmasq-2.90/src/dhcp.c
  #ifdef HAVE_DHCP
  
  struct iface_param {
-diff -ruN org/dnsmasq-2.90/src/tftp.c patch/dnsmasq-2.90/src/tftp.c
---- org/dnsmasq-2.90/src/tftp.c	2024-02-13 07:49:15.000000000 -0600
-+++ patch/dnsmasq-2.90/src/tftp.c	2024-03-08 02:10:31.275758376 -0600
-@@ -16,6 +16,8 @@
+diff -ruN org/dnsmasq-2.91/src/tftp.c patch/dnsmasq-2.91/src/tftp.c
+--- org/dnsmasq-2.91/src/tftp.c	2025-03-14 10:09:35.000000000 -0500
++++ patch/dnsmasq-2.91/src/tftp.c	2025-03-31 23:54:36.758208856 -0500
+@@ -16,6 +16,10 @@
  
  #include "dnsmasq.h"
  
++#ifdef __ANDROID__
 +#define ETHER_ADDR_LEN 6
++#endif
 +
  #ifdef HAVE_TFTP
  

@@ -1,10 +1,10 @@
 #!/bin/sh
 
-export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26d
 
 mkdir hev-socks5-server
 cd hev-socks5-server
-git clone --recursive --depth 1 https://github.com/heiher/hev-socks5-server jni
+git clone --recursive --depth 1 --branch 2.8.0 https://github.com/heiher/hev-socks5-server jni
 patch -N -p1 < ../server.patch
 cd jni
 $ANDROID_NDK_HOME/ndk-build
@@ -14,7 +14,7 @@ cd ../..
 
 mkdir hev-socks5-tproxy
 cd hev-socks5-tproxy
-git clone --recursive --depth 1 https://github.com/heiher/hev-socks5-tproxy jni
+git clone --recursive --depth 1 --branch 2.8.0 https://github.com/heiher/hev-socks5-tproxy jni
 patch -N -p1 < ../tproxy.patch
 cd jni
 $ANDROID_NDK_HOME/ndk-build

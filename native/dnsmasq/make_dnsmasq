@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 options=("arm7a" "aarch64")
 select opt in "${options[@]}"
@@ -16,7 +16,7 @@ do
     esac
 done
 
-export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26b
+export ANDROID_NDK_HOME=~/android-tools/android-ndk-r26d
 export HOST_TAG=linux-x86_64
 export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG
 export AR=$TOOLCHAIN/bin/llvm-ar
@@ -27,11 +27,11 @@ export LD=$TOOLCHAIN/bin/ld
 export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
 export STRIP=$TOOLCHAIN/bin/llvm-strip
 
-rm -R dnsmasq-2.90
-wget -nc https://thekelleys.org.uk/dnsmasq/dnsmasq-2.90.tar.gz
-tar -xf dnsmasq-2.90.tar.gz
+rm -R dnsmasq-2.91
+wget -nc https://thekelleys.org.uk/dnsmasq/dnsmasq-2.91.tar.gz
+tar -xf dnsmasq-2.91.tar.gz
 patch -N -p1 < dnsmasq.patch
-cd dnsmasq-2.90
-make
+cd dnsmasq-2.91
+/home/user/android-tools/android-ndk-r26d/prebuilt/linux-x86_64/bin/make
 $STRIP src/dnsmasq
 mv src/dnsmasq ../dnsmasq_$HOST
