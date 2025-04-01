@@ -32,6 +32,6 @@ wget -nc https://thekelleys.org.uk/dnsmasq/dnsmasq-2.91.tar.gz
 tar -xf dnsmasq-2.91.tar.gz
 patch -N -p1 < dnsmasq.patch
 cd dnsmasq-2.91
-/home/user/android-tools/android-ndk-r26d/prebuilt/linux-x86_64/bin/make
+make
 $STRIP src/dnsmasq
 mv src/dnsmasq ../dnsmasq_$HOST
