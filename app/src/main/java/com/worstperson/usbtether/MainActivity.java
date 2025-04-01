@@ -17,6 +17,7 @@
 package com.worstperson.usbtether;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.os.HandlerCompat;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -30,8 +31,12 @@ import android.net.Network;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -119,6 +124,74 @@ public class MainActivity extends AppCompatActivity {
         }
         net_textview.setText(name);
     }
+
+    final Handler handler = new Handler(Looper.getMainLooper());
+
+    Runnable save_ipv4_text = new Runnable() {
+        @Override
+        public void run() {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            EditText ipv4_text = findViewById(R.id.ipv4_text);
+            String contents = ipv4_text.getText().toString();
+            Pattern sPattern = Pattern.compile("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
+            if (sPattern.matcher(contents).matches()) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putString("ipv4Addr", contents);
+                edit.apply();
+            }
+        }
+    };
+
+    Runnable save_wg_text = new Runnable() {
+        @Override
+        public void run() {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            EditText wg_text = findViewById(R.id.wg_text);
+            Spinner interface_spinner = findViewById(R.id.interface_spinner);
+            int autostartVPN = sharedPref.getInt("autostartVPN", 0);
+            SharedPreferences.Editor edit = sharedPref.edit();
+            edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
+            if (autostartVPN == 2) {
+                String upstreamInterface = String.valueOf(wg_text.getText());
+                MainActivity.this.setInterfaceSpinner(upstreamInterface, interface_spinner);
+                edit.putString("upstreamInterface", upstreamInterface);
+            }
+            edit.apply();
+        }
+    };
+
+    Runnable save_bandwidth_text = new Runnable() {
+        @Override
+        public void run() {
+            SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
+            EditText bandwidth_text = findViewById(R.id.bandwidth_text);
+            Pattern sPattern = Pattern.compile("^\\d+$");
+            if (sPattern.matcher(String.valueOf(bandwidth_text.getText())).matches()) {
+                SharedPreferences.Editor edit = sharedPref.edit();
+                edit.putString("clientBandwidth", String.valueOf(bandwidth_text.getText()));
+                edit.apply();
+            }
+        }
+    };
+
+    Runnable start_service = new Runnable() {
+        @Override
+        public void run() {
+            if (HandlerCompat.hasCallbacks(handler, save_ipv4_text) || HandlerCompat.hasCallbacks(handler, save_wg_text) || HandlerCompat.hasCallbacks(handler, save_bandwidth_text)) {
+                if (HandlerCompat.hasCallbacks(handler, start_service)) {
+                    handler.removeCallbacks(start_service);
+                }
+                handler.postDelayed(start_service, 1000);
+            } else {
+                Intent it = new Intent(MainActivity.this, ForegroundService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    MainActivity.this.startForegroundService(it);
+                } else {
+                    MainActivity.this.startService(it);
+                }
+            }
+        }
+    };
 
     @SuppressLint({"UseSwitchCompatOrMaterialCode", "BatteryLife", "WrongConstant"})
     @Override
@@ -313,15 +386,14 @@ public class MainActivity extends AppCompatActivity {
                 SharedPreferences.Editor edit = sharedPref.edit();
                 edit.putBoolean("serviceEnabled", isChecked);
                 edit.apply();
-                Intent it = new Intent(MainActivity.this, ForegroundService.class);
                 if (isChecked) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        MainActivity.this.startForegroundService(it);
-                    } else {
-                        MainActivity.this.startService(it);
+                    if (HandlerCompat.hasCallbacks(handler, start_service)) {
+                        handler.removeCallbacks(start_service);
                     }
+                    handler.postDelayed(start_service, 1000);
                     ForegroundService.isStarted = true;
                 } else {
+                    Intent it = new Intent(MainActivity.this, ForegroundService.class);
                     MainActivity.this.stopService(it);
                 }
             }
@@ -428,12 +500,31 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        ipv4_text.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (HandlerCompat.hasCallbacks(handler, save_ipv4_text)) {
+                    handler.removeCallbacks(save_ipv4_text);
+                }
+                handler.postDelayed(save_ipv4_text, 5000);
+            }
+        });
+
         ipv4_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
                     Pattern sPattern = Pattern.compile("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
                     if (sPattern.matcher(String.valueOf(ipv4_text.getText())).matches()) {
+                        if (HandlerCompat.hasCallbacks(handler, save_ipv4_text)) {
+                            handler.removeCallbacks(save_ipv4_text);
+                        }
                         SharedPreferences.Editor edit = sharedPref.edit();
                         edit.putString("ipv4Addr", String.valueOf(ipv4_text.getText()));
                         edit.apply();
@@ -444,12 +535,31 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        wg_text.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (HandlerCompat.hasCallbacks(handler, save_wg_text)) {
+                    handler.removeCallbacks(save_wg_text);
+                }
+                handler.postDelayed(save_wg_text, 5000);
+            }
+        });
+
         wg_text.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 int autostartVPN = sharedPref.getInt("autostartVPN", 0);
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    if (HandlerCompat.hasCallbacks(handler, save_wg_text)) {
+                        handler.removeCallbacks(save_wg_text);
+                    }
                     SharedPreferences.Editor edit = sharedPref.edit();
                     edit.putString("wireguardProfile", String.valueOf(wg_text.getText()));
                     if (autostartVPN == 2) {
@@ -460,8 +570,23 @@ public class MainActivity extends AppCompatActivity {
                     edit.apply();
                     return false;
                 }
-
                 return true;
+            }
+        });
+
+        bandwidth_text.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (HandlerCompat.hasCallbacks(handler, save_bandwidth_text)) {
+                    handler.removeCallbacks(save_bandwidth_text);
+                }
+                handler.postDelayed(save_bandwidth_text, 5000);
             }
         });
 
@@ -470,6 +595,9 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    if (HandlerCompat.hasCallbacks(handler, save_bandwidth_text)) {
+                        handler.removeCallbacks(save_bandwidth_text);
+                    }
                     Pattern sPattern = Pattern.compile("^\\d+$");
                     if (sPattern.matcher(String.valueOf(bandwidth_text.getText())).matches()) {
                         SharedPreferences.Editor edit = sharedPref.edit();
@@ -478,7 +606,6 @@ public class MainActivity extends AppCompatActivity {
                         return false;
                     }
                 }
-
                 return true;
             }
         });
@@ -500,15 +627,15 @@ public class MainActivity extends AppCompatActivity {
 
         TextView net_textview = findViewById(R.id.net_textview);
         Spinner interface_spinner = findViewById(R.id.interface_spinner);
-        EditText ipv4_text = findViewById(R.id.ipv4_text);
+        //EditText ipv4_text = findViewById(R.id.ipv4_text);
 
         setNetTextview(net_textview);
 
         SharedPreferences sharedPref = getSharedPreferences("Settings", Context.MODE_PRIVATE);
         String upstreamInterface = sharedPref.getString("upstreamInterface", "Auto");
-        String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
+        //String ipv4Addr = sharedPref.getString("ipv4Addr", "192.168.42.129");
 
         setInterfaceSpinner(upstreamInterface, interface_spinner);
-        ipv4_text.setText(ipv4Addr);
+        //ipv4_text.setText(ipv4Addr);
     }
 }
